@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.coverage
+deployment/
+*.key
+*.pem
+*.pub
+config.toml
+system-plan.sh
+*.png
+*.tar.gz
