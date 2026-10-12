@@ -23,34 +23,40 @@ def root_unit(action,unit):
         time.sleep(.05)
     raise RuntimeError(f'{action} timed out: {unit}')
 
+def units(cfg):
+    return (USER_UNITS,ROOT_UNITS) if cfg.role=='client' else (['bridge-shot-view.service'],['bridge-shot.service'])
+
 def stop(cfg):
     from .display import clock_control
     cfg.stopped.touch();errors=[]
-    try:rpc(cfg.runtime/'bridge-key-code.sock','stop')
+    user_units,root_units=units(cfg)
+    try:
+        if cfg.role=='client':rpc(cfg.runtime/'bridge-key-code.sock','stop')
     except Exception:pass
     try:
-        r=run(['systemctl','--user','stop',*USER_UNITS],check=False)
+        r=run(['systemctl','--user','stop',*user_units],check=False)
         if r.returncode:errors.append('user units could not stop')
     except subprocess.TimeoutExpired:
-        run(['systemctl','--user','kill','--signal=SIGKILL',*USER_UNITS],check=False)
+        run(['systemctl','--user','kill','--signal=SIGKILL',*user_units],check=False)
         errors.append('user units were force-terminated')
-    for unit in ROOT_UNITS:
+    for unit in root_units:
         try:root_unit('stop',unit)
         except Exception as e:errors.append(str(e))
-    clock_control(cfg,'reset')
+    if cfg.role=='client':clock_control(cfg,'reset')
     if errors:raise RuntimeError('; '.join(errors))
 
 def start(cfg):
     from .display import clock_control
     cfg.stopped.touch()
+    user_units,root_units=units(cfg)
     try:
-        clock_control(cfg,'reset')
+        if cfg.role=='client':clock_control(cfg,'reset')
         if run(['systemctl','is-active','bridge-filter.service'],check=False).stdout.strip()!='active':
             raise RuntimeError('bridge-filter.service is not active; refusing to open transport')
-        for unit in reversed(ROOT_UNITS):root_unit('start',unit)
-        run(['systemctl','--user','reset-failed',*USER_UNITS],check=False)
-        run(['systemctl','--user','start',*USER_UNITS])
-        rpc(cfg.runtime/'bridge-key-code.sock','stop')
+        for unit in reversed(root_units):root_unit('start',unit)
+        run(['systemctl','--user','reset-failed',*user_units],check=False)
+        run(['systemctl','--user','start',*user_units])
+        if cfg.role=='client':rpc(cfg.runtime/'bridge-key-code.sock','stop')
         cfg.stopped.unlink(missing_ok=True)
     except Exception:
         try:stop(cfg)
@@ -58,10 +64,11 @@ def start(cfg):
         raise
 
 def status(cfg):
-    data={'stopped':cfg.stopped.exists()}
-    for name,prefix,units in [('client',['systemctl','--user'],USER_UNITS),('transport',['systemctl'],ROOT_UNITS)]:
-        data[name]=dict(zip(units,run(prefix+['is-active',*units],check=False).stdout.splitlines()))
-    for name,endpoint in [('input','bridge-key-code.sock'),('queue','bridge-shot-queue.sock')]:
+    user_units,root_units=units(cfg)
+    data={'role':cfg.role,'stopped':cfg.stopped.exists()}
+    for name,prefix,unit_names in [(cfg.role,['systemctl','--user'],user_units),('transport',['systemctl'],root_units)]:
+        data[name]=dict(zip(unit_names,run(prefix+['is-active',*unit_names],check=False).stdout.splitlines()))
+    for name,endpoint in ([('input','bridge-key-code.sock'),('queue','bridge-shot-queue.sock')] if cfg.role=='client' else []):
         try:data[name]=rpc(cfg.runtime/endpoint,'status')
         except Exception:data[name]={'ok':False}
     return data
@@ -75,6 +82,6 @@ def execute(cfg,action):
         elif action=='status':return status(cfg)
         elif action=='reset':
             from .display import clock_control
-            clock_control(cfg,'reset')
+            if cfg.role=='client':clock_control(cfg,'reset')
         else:raise ValueError('invalid control action')
     return {'ok':True,'action':action}

@@ -58,10 +58,18 @@ def doctor(cfg):
     return 0 if all(results.values()) else 1
 
 def main():
-    p=argparse.ArgumentParser(prog='waybridge');p.add_argument('--config')
+    from . import __version__
+    p=argparse.ArgumentParser(prog='waybridge');p.add_argument('--config');p.add_argument('--version',action='version',version='%(prog)s '+__version__)
     sub=p.add_subparsers(dest='command',required=True)
     init=sub.add_parser('init');init.add_argument('--role',choices=['client','helper'],required=True);init.add_argument('--peer-ip',required=True);init.add_argument('--helper-user')
-    sub.add_parser('doctor');sub.add_parser('install-user')
+    sub.add_parser('doctor');sub.add_parser('install-user');sub.add_parser('check')
+    setup=sub.add_parser('setup');setup.add_argument('--role',choices=['client','helper']);setup.add_argument('--peer-profile');setup.add_argument('--keyboard');setup.add_argument('--yes',action='store_true')
+    for flag in ('skip-packages','skip-root','no-start','no-integrate'):setup.add_argument('--'+flag,action='store_true')
+    pair=sub.add_parser('pair');ps=pair.add_subparsers(dest='pair_action',required=True)
+    exp=ps.add_parser('export');exp.add_argument('--role',choices=['client','helper']);exp.add_argument('--output')
+    show=ps.add_parser('show');show.add_argument('file')
+    for action in ('start','stop','status'):sub.add_parser(action)
+    sub.add_parser('helper-start')
     link=sub.add_parser('link');link.add_argument('--peer-host-key',required=True)
     root=sub.add_parser('root-plan');root.add_argument('--peer-key',required=True);root.add_argument('--output',required=True)
     for name,choices in [('control',['start','stop','status','reset']),('input',['serve','toggle','stop','status']),('shot',['serve','request','status']),('clock',['serve','reset','toggle'])]:
@@ -74,13 +82,35 @@ def main():
     args=p.parse_args()
     try:
         if args.command=='init':initialize(args);return 0
+        if args.command=='setup':
+            from .setup import wizard
+            return wizard(args)
+        if args.command=='pair':
+            from .pairing import export,read,fingerprint
+            if args.pair_action=='show':
+                value=read(args.file);print(json.dumps(value,ensure_ascii=False,indent=2));print('Код сверки:',fingerprint(value))
+            else:export(args.role or load(args.config).role,args.output)
+            return 0
         cfg=load(args.config)
         c=args.command
-        if cfg.role=='helper' and c in {'control','input','shot','clock','files','notes','battery','release','session-start','trigger'}:
+        if cfg.role=='helper' and c in {'input','shot','clock','files','notes','battery','release','session-start','trigger'}:
             raise ValueError('this command requires role client')
         if cfg.role=='client' and c in {'receive','gallery','send-code','send-answer'}:
             raise ValueError('this command requires role helper')
         if c=='doctor':return doctor(cfg)
+        if c=='check':
+            from .diagnostics import check
+            return check(cfg)
+        if c in {'start','stop','status'}:
+            from .control import execute
+            print(json.dumps(execute(cfg,c),ensure_ascii=False,indent=2));return 0
+        if c=='helper-start':
+            if cfg.role!='helper':raise ValueError('helper role required')
+            subprocess.run(['systemctl','--user','import-environment','WAYLAND_DISPLAY','HYPRLAND_INSTANCE_SIGNATURE','XDG_CURRENT_DESKTOP'],check=True,timeout=3)
+            if not cfg.stopped.exists():
+                from .control import execute
+                execute(cfg,'start')
+            return 0
         if c=='link':
             from .install import link
             link(cfg,Path(args.peer_host_key));return 0
@@ -126,5 +156,7 @@ def main():
             subprocess.run(['systemctl','--user','import-environment','WAYLAND_DISPLAY','HYPRLAND_INSTANCE_SIGNATURE','XDG_CURRENT_DESKTOP'],check=True,timeout=3)
             if not cfg.stopped.exists():subprocess.run(['systemctl','--user','start','bridge-start.service'],check=True,timeout=15)
         return 0
+    except KeyboardInterrupt:
+        print('Отменено. Повторите setup, чтобы продолжить.',file=sys.stderr);return 130
     except (OSError,ValueError,RuntimeError,subprocess.SubprocessError) as e:
         print(type(e).__name__+': '+str(e),file=sys.stderr);return 1

@@ -54,7 +54,7 @@ def user_install(cfg,config):
             dest=backup/path.relative_to(home);dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(path,dest)
         atomic(path,data.encode());path.chmod(mode)
     wrappers={'bridge':'control','key-code.py':'input','shot-send.sh':'shot request','bridge-clock.py':'clock','battery-link.py':'battery','note-stream.py':'notes','bridge-session-start.sh':'session-start','send-code':'send-code','send-answer':'send-answer','push-file.py':'send-code'}
-    if cfg.role=='helper':wrappers={k:v for k,v in wrappers.items() if k in {'send-code','send-answer','push-file.py'}}
+    if cfg.role=='helper':wrappers={k:v for k,v in wrappers.items() if k in {'bridge','send-code','send-answer','push-file.py'}}
     else:wrappers={k:v for k,v in wrappers.items() if k not in {'send-code','send-answer','push-file.py'}}
     for name,args in wrappers.items():
         # Default worker command for backwards-compatible Waybar scripts.
@@ -70,6 +70,7 @@ def user_install(cfg,config):
             write(units/(name+'.service'),text)
         for name,action in [('bridge-start','start'),('bridge-kill','stop')]:
             write(units/(name+'.service'),'[Unit]\nDescription=Waybridge '+action+'\n[Service]\nType=oneshot\nTimeoutStartSec=45\nExecStart='+command(config,'control '+action)+'\n')
+        write(home/'.config/bridge/hypr-helper.lua','-- Helper startup disabled: this device is now a client.\n')
         bridge=home/'.config/bridge';bridge.mkdir(parents=True,exist_ok=True)
         write(bridge/'hypr-client.lua',bindings(config,cfg.hold_ms))
         note={'name':'bridge-note','layer':'overlay','position':'top','exclusive':False,'passthrough':True,'modules-center':['custom/bridge-note'],'custom/bridge-note':{'exec':command(config,'notes'),'return-type':'json','restart-interval':2,'escape':True,'tooltip':False}}
@@ -78,7 +79,10 @@ def user_install(cfg,config):
         write(units/'bridge-note.service','[Unit]\nDescription=Waybridge text panel\nPartOf=graphical-session.target\nStartLimitIntervalSec=60\nStartLimitBurst=3\n[Service]\nExecStart=/usr/bin/waybar -c '+str(bridge/'note-waybar.jsonc')+' -s '+str(bridge/'note-waybar.css')+'\nRestart=on-failure\nRestartSec=2\nTimeoutStopSec=3\n')
         # Standalone include, never rewrites an unrelated user's Waybar layout.
         write(bridge/'waybar-modules.json',json.dumps({'custom/bridge-clock':{'exec':command(config,'clock serve'),'return-type':'json','restart-interval':2,'escape':True},'custom/battery':{'exec':command(config,'battery'),'return-type':'json','restart-interval':3}},indent=2)+'\n')
-    else:write(units/'bridge-shot-view.service',unit(config,'gallery'))
+    else:
+        write(units/'bridge-shot-view.service',unit(config,'gallery'))
+        write(home/'.config/bridge/hypr-client.lua','-- Client controls disabled: this device is now a helper.\n')
+        write(home/'.config/bridge/hypr-helper.lua','hl.on(\"hyprland.start\", function() hl.exec_cmd('+json.dumps(command(config,'helper-start'))+') end)\n')
     subprocess.run(['systemctl','--user','daemon-reload'],check=True,timeout=5)
     print('Installed user files. Backup:',backup)
     print('Client module:',home/'.config/bridge/hypr-client.lua')
@@ -101,6 +105,9 @@ set -Eeuo pipefail
     text+='[[ $(tailscale ip -4) == '+q(cfg.own_ip)+' ]] || { echo "Tailscale IP changed"; exit 1; }\n'
     dependencies='openssh nftables python inotify-tools '+('ydotool acl grim' if cfg.role=='client' else 'imv')
     text+='pacman -S --needed --noconfirm '+dependencies+'\n'
+    text+='for unit in bridge-inbox.service ydotool-bridge.service bridge-shot.service; do systemctl stop \"$unit\" 2>/dev/null || true; done\n'
+    if cfg.role=='client':text+='systemctl disable bridge-shot.service 2>/dev/null || true\n'
+    else:text+='systemctl disable bridge-inbox.service ydotool-bridge.service 2>/dev/null || true\n'
     text+='backup=/var/lib/waybridge/backups/$(date +%Y%m%d-%H%M%S)\ninstall -d -m 700 \"$backup\"\nfor path in /etc/bridge /etc/systemd/system/bridge-inbox.service /etc/systemd/system/bridge-shot.service /etc/systemd/system/bridge-filter.service /etc/systemd/system/ydotool-bridge.service /etc/udev/rules.d/90-bridge-key-code.rules /etc/polkit-1/rules.d/49-bridge-units.rules /usr/local/libexec/bridge/receive-shot.py; do\n if [[ -e $path ]]; then cp -a --parents \"$path\" \"$backup\"; fi\ndone\n'
     text+='install -d -o root -g root -m 755 /etc/bridge /etc/bridge/keys /usr/local/libexec/bridge\nssh-keygen -A\n'
     def put(path,data,mode=644):
@@ -144,6 +151,9 @@ TimeoutStopSec=3
     }
 });''')
     else:
+        text+='rm -f /etc/udev/rules.d/90-bridge-key-code.rules\nudevadm control --reload-rules\n'
+        text+='if command -v setfacl >/dev/null && [[ -e '+q(cfg.keyboard)+' ]]; then setfacl -x u:'+str(uid)+' '+q(cfg.keyboard)+' || true; fi\n'
+        put('/etc/polkit-1/rules.d/49-bridge-units.rules','polkit.addRule(function(action, subject) { if (action.id === \"org.freedesktop.systemd1.manage-units\" && subject.user === '+json.dumps(cfg.user)+' && action.lookup(\"unit\") === \"bridge-shot.service\" && (action.lookup(\"verb\") === \"start\" || action.lookup(\"verb\") === \"stop\")) return polkit.Result.YES; });')
         put('/usr/local/libexec/bridge/receive-shot.py','#!/bin/sh\nexec '+command(config,'receive'),755)
     auth='restrict,from="'+cfg.peer_ip+'" '+key
     put('/etc/bridge/keys/'+account,auth)
@@ -195,8 +205,8 @@ ExecStart=/usr/bin/nft -f /etc/bridge/bridge-filter.nft
 [Install]
 WantedBy=multi-user.target
 ''')
-    text+='nft -c -f /etc/bridge/bridge-filter.nft\nsshd -t -f '+q(conf)+'\nsystemctl daemon-reload\nsystemctl enable --now bridge-filter.service\n'
-    if cfg.role=='helper':text+='systemctl enable --now bridge-shot.service\n'
+    text+='nft -c -f /etc/bridge/bridge-filter.nft\nsshd -t -f '+q(conf)+'\nsystemctl daemon-reload\nsystemctl enable bridge-filter.service\nsystemctl restart bridge-filter.service\n'
+    if cfg.role=='helper':text+='systemctl disable bridge-shot.service\necho \"Use waybridge start in the graphical session\"\n'
     else:text+='systemctl disable bridge-inbox.service ydotool-bridge.service\necho "Use waybridge control start in the graphical session; input stays OFF"\n'
     atomic(output,text.encode());output.chmod(0o700);print(output)
 

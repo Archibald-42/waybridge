@@ -85,6 +85,8 @@ class StorageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             result=subprocess.run([sys.executable,'-m','waybridge','--config',str(Path(td)/'missing.toml'),'doctor'],capture_output=True)
             self.assertEqual(result.returncode,1)
+            self.assertIn(b'FileNotFoundError:',result.stderr)
+            self.assertNotIn(b'Traceback',result.stderr)
 
     def test_budget_count_and_bytes(self):
         b=Budget(2,100);self.assertTrue(b.reserve());self.assertTrue(b.reserve());self.assertFalse(b.reserve())

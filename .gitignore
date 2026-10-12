@@ -13,3 +13,5 @@ config.toml
 system-plan.sh
 *.png
 *.tar.gz
+
+*.wbpair

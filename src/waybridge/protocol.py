@@ -34,8 +34,8 @@ def frame(identifier,data):
     header={'id':identifier,'sha256':digest,'size':len(data)}
     return MAGIC+json.dumps(header,separators=(',',':')).encode()+b'\n'+data,header
 
-def parse(stream):
-    first=stream.read(4)
+def parse(stream,first=None):
+    if first is None:first=stream.read(4)
     if first!=MAGIC:
         data=first+stream.read(LIMIT+1)
         if len(data)>LIMIT:raise ValueError('legacy PNG too large')

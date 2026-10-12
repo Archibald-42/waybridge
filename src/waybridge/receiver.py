@@ -12,11 +12,16 @@ from .runtime import atomic
 def receive(cfg,stream=None):
     os.umask(0o077);signal.alarm(25)
     try:
-        return _receive(cfg,stream or sys.stdin.buffer)
+        source=stream or sys.stdin.buffer;first=source.read(4)
+        if first==b'WBH1':
+            if source.read(2)!=b'\n':raise ValueError('invalid health request')
+            from .diagnostics import helper_health
+            print(json.dumps(helper_health(cfg)),flush=True);return
+        return _receive(cfg,source,first)
     finally:signal.alarm(0)
 
-def _receive(cfg,stream):
-    header,data=parse(stream)
+def _receive(cfg,stream,first):
+    header,data=parse(stream,first)
     if header is None:
         header={'id':uuid.uuid4().hex,'sha256':hashlib.sha256(data).hexdigest(),'size':len(data)}
         legacy=True

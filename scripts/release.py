@@ -11,7 +11,7 @@ output=Path(args.output).resolve()
 paths=[]
 for top in ('src','scripts','tests','docs','.github'):
     paths += [x for x in (root/top).rglob('*') if x.is_file() and '__pycache__' not in x.parts]
-paths += [root/x for x in ('README.md','SECURITY.md','LICENSE','pyproject.toml','.gitignore')]
+paths += [root/x for x in ('setup.sh','README.md','SECURITY.md','LICENSE','pyproject.toml','.gitignore')]
 paths=sorted(paths,key=lambda x:x.relative_to(root).as_posix())
 manifest=''.join(hashlib.sha256(x.read_bytes()).hexdigest()+'  '+x.relative_to(root).as_posix()+'\n' for x in paths)
 (root/'SHA256SUMS').write_text(manifest)
