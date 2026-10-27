@@ -21,7 +21,7 @@ def run(cmd,timeout=12,check=True):
 
 def preflight(cfg):
     commands=['systemctl','busctl','tailscale','ssh','inotifywait']
-    commands+=['grim','hyprctl'] if cfg.role=='client' else ['imv-wayland','imv-msg']
+    commands+=['grim','hyprctl'] if cfg.role=='client' else ['sftp','imv-wayland','imv-msg']
     missing=[name for name in commands if not shutil.which(name)]
     if missing:raise RuntimeError('Не установлены: '+', '.join(missing)+'. Запустите waybridge setup.')
     runtime=cfg.runtime
@@ -115,5 +115,6 @@ def execute(cfg,action):
                 time.sleep(.05)
         if action=='start':start(cfg)
         elif action=='stop':stop(cfg)
+        elif action=='restart':stop(cfg);start(cfg)
         else:raise ValueError('invalid control action')
     return {'ok':True,'action':action}

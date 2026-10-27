@@ -51,12 +51,12 @@ def main():
     init=sub.add_parser('init');init.add_argument('--role',type=role,choices=['client','server'],required=True);init.add_argument('--peer-ip',required=True);init.add_argument('--server-user')
     sub.add_parser('doctor');sub.add_parser('install-user');sub.add_parser('check')
     uninstall=sub.add_parser('uninstall');uninstall.add_argument('--yes',action='store_true');uninstall.add_argument('--authorizer',choices=['sudo','pkexec'],default='sudo')
-    setup=sub.add_parser('setup');setup.add_argument('--role',type=role,choices=['client','server']);setup.add_argument('--peer-profile');setup.add_argument('--yes',action='store_true')
+    setup=sub.add_parser('setup');setup.add_argument('--role',type=role,choices=['client','server']);setup.add_argument('--peer-profile');setup.add_argument('--yes',action='store_true');setup.add_argument('--update',action='store_true')
     for flag in ('skip-packages','skip-root','no-start','no-integrate'):setup.add_argument('--'+flag,action='store_true')
     pair=sub.add_parser('pair');ps=pair.add_subparsers(dest='pair_action',required=True)
     exp=ps.add_parser('export');exp.add_argument('--role',type=role,choices=['client','server']);exp.add_argument('--output')
     show=ps.add_parser('show');show.add_argument('file')
-    for action in ('start','stop','status'):sub.add_parser(action)
+    for action in ('start','stop','restart','status'):sub.add_parser(action)
     sub.add_parser('server-start')
     link=sub.add_parser('link');link.add_argument('--peer-host-key',required=True)
     root=sub.add_parser('root-plan');root.add_argument('--peer-key',required=True);root.add_argument('--output',required=True)
@@ -93,7 +93,7 @@ def main():
         if c=='check':
             from .diagnostics import check
             return check(cfg)
-        if c in {'start','stop','status'}:
+        if c in {'start','stop','restart','status'}:
             from .control import execute
             print(json.dumps(execute(cfg,c),ensure_ascii=False,indent=2));return 0
         if c=='server-start':

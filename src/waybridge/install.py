@@ -17,13 +17,12 @@ def unit(config,args,watchdog=False,ready=False):
     return '''[Unit]
 Description=Waybridge '''+args+'''
 PartOf=graphical-session.target
-StartLimitIntervalSec=60
-StartLimitBurst=3
+StartLimitIntervalSec=0
 
 [Service]
 Type='''+('notify' if watchdog or ready else 'simple')+'\nExecStart='+command(config,args)+'''
 Restart=on-failure
-RestartSec=2
+RestartSec=3
 TimeoutStartSec=10
 TimeoutStopSec=3
 KillMode=control-group

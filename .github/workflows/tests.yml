@@ -17,3 +17,12 @@ jobs:
       - run: python -W error -m compileall -q src
       - run: bash -n setup.sh
       - run: python scripts/bootstrap.py --prefix .venv && .venv/bin/waybridge setup --help
+      - name: Reproducible archive and integrity
+        run: |
+          python scripts/release.py --output /tmp/waybridge-a.tar.gz
+          python scripts/release.py --output /tmp/waybridge-b.tar.gz
+          cmp /tmp/waybridge-a.tar.gz /tmp/waybridge-b.tar.gz
+          mkdir /tmp/waybridge-release
+          tar -xzf /tmp/waybridge-a.tar.gz -C /tmp/waybridge-release
+          cd /tmp/waybridge-release/waybridge
+          sha256sum -c SHA256SUMS

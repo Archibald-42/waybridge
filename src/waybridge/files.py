@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+import selectors
 import stat
 import subprocess
 import tempfile
@@ -17,6 +18,18 @@ NAME=re.compile(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,100}')
 SUFFIXES={'.py','.cpp','.c','.h','.hpp','.rs','.js','.ts','.java','.go','.sh','.txt','.json'}
 LIMIT=32*1024*1024
 DELIVERY=re.compile(r'\.delivery-([a-f0-9]{32})\.json')
+
+def sftp(batch,timeout=45):
+    return subprocess.run(['sftp','-q','-o','ConnectTimeout=5','-o','ServerAliveInterval=3',
+                           '-o','ServerAliveCountMax=2','-b','-','bridge-inbox'],
+                          input=batch,text=True,timeout=timeout,capture_output=True)
+
+def transfer_error(detail):
+    detail=detail.strip()[-600:]
+    if any(text in detail.lower() for text in ('host key verification failed','remote host identification has changed','permission denied (publickey','no such identity')):
+        return 'SSH не прошёл проверку ключей. Выполните waybridge check; при смене ПК повторите setup с проверенным профилем. '+detail
+    return 'Клиент недоступен или SFTP отклонил загрузку. На ноутбуке выполните waybridge start (Numpad 7), затем waybridge check. Исходник на ПК сохранён. '+detail
+
 
 def receipt(cfg,identifier,data):
     folder=cfg.inbox/'.receipts';folder.mkdir(mode=0o2750,exist_ok=True)
@@ -41,7 +54,7 @@ def wait_receipt(identifier,expected,folder,expected_name):
         if delay:time.sleep(delay)
         target.unlink(missing_ok=True)
         try:
-            r=subprocess.run(['sftp','-q','-b','-','bridge-inbox'],input=batch,text=True,timeout=5,capture_output=True)
+            r=sftp(batch,timeout=5)
             if r.returncode or not target.exists():continue
             if target.stat().st_size>1024:continue
             value=json.loads(target.read_text())
@@ -61,20 +74,28 @@ def push(cfg,source,name=None):
     if len(data)>LIMIT:raise ValueError('file exceeds 32 MiB')
     cfg.state.mkdir(parents=True,exist_ok=True)
     with (cfg.state/'push.lock').open('w') as lock,tempfile.TemporaryDirectory(prefix='waybridge-push-') as td:
-        fcntl.flock(lock,fcntl.LOCK_EX)
+        deadline=time.monotonic()+5
+        while True:
+            try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB);break
+            except BlockingIOError:
+                if time.monotonic()>=deadline:raise RuntimeError('Другая отправка ещё выполняется. Повторите команду после её завершения.')
+                time.sleep(.05)
         local=Path(td)/'payload';local.write_bytes(data);identifier=uuid.uuid4().hex
         digest=hashlib.sha256(data).hexdigest()
         marker=Path(td)/'delivery.json';marker.write_text(json.dumps({'id':identifier,'name':name,'sha256':digest}))
         batch=f'put -f "{local}" /inbox/.partial-{identifier}\nrename /inbox/.partial-{identifier} /inbox/{name}\nput -f "{marker}" /inbox/.partial-meta-{identifier}\nrename /inbox/.partial-meta-{identifier} /inbox/.delivery-{identifier}.json\n'
-        for attempt in range(4):
+        detail='Сервер не ответил за отведённое время.'
+        for attempt in range(3):
             try:
-                r=subprocess.run(['sftp','-q','-b','-','bridge-inbox'],input=batch,text=True,timeout=60,capture_output=True)
+                r=sftp(batch)
                 if r.returncode==0:
                     wait_receipt(identifier,digest,td,name)
                     return
-            except subprocess.TimeoutExpired:pass
-            if attempt<3:time.sleep(2**attempt)
-    raise RuntimeError('SFTP delivery failed; local source preserved')
+                detail=(r.stderr or r.stdout or 'SFTP завершился с кодом '+str(r.returncode)).strip()
+                if any(text in detail.lower() for text in ('host key verification failed','remote host identification has changed','permission denied (publickey','no such identity')):break
+            except subprocess.TimeoutExpired:detail='Время ожидания SFTP истекло.'
+            if attempt<2:time.sleep(2**attempt)
+    raise RuntimeError(transfer_error(detail))
 
 def push_many(cfg,sources):
     paths=[Path(source).expanduser() for source in sources]
@@ -164,17 +185,56 @@ def publish_safely(cfg,name):
             except OSError:pass
         return False
 
+def file_signature(path):
+    try:
+        info=path.lstat()
+        if stat.S_ISREG(info.st_mode):return info.st_ino,info.st_size,info.st_mtime_ns,info.st_ctime_ns
+    except FileNotFoundError:pass
+    return None
+
+def eligible(name):
+    return bool(DELIVERY.fullmatch(name) or (NAME.fullmatch(name) and Path(name).suffix in SUFFIXES))
+
+def process_event(cfg,name,seen):
+    if not eligible(name):return
+    signature=file_signature(cfg.inbox/name)
+    seen.pop(name,None)
+    if publish_safely(cfg,name) and signature is not None:seen[name]=signature
+
+def reconcile(cfg,seen):
+    """Stat-only scan repairs missed events; unchanged files are not recopied."""
+    current={}
+    for path in cfg.inbox.iterdir():
+        if not eligible(path.name):continue
+        signature=file_signature(path)
+        if signature is None:continue
+        current[path.name]=signature
+        # Failed transactions stay eligible, so repairing a destination needs no re-upload.
+        if seen.get(path.name)!=signature:
+            if not publish_safely(cfg,path.name):current.pop(path.name,None)
+    return current
+
 def serve(cfg):
     signals();cfg.projects.mkdir(parents=True,exist_ok=True);cfg.state.mkdir(parents=True,exist_ok=True)
-    child=watch(cfg.inbox)
+    child=watch(cfg.inbox);selector=selectors.DefaultSelector()
+    os.set_blocking(child.stdout.fileno(),False);selector.register(child.stdout,selectors.EVENT_READ)
+    pending=b'';seen={}
     try:
         notify('READY=1\nSTATUS=File watcher ready')
-        paths=[]
-        for path in cfg.inbox.iterdir():
-            try:paths.append((path.stat().st_mtime,path.name))
-            except FileNotFoundError:continue
-        for _,name in sorted(paths):publish_safely(cfg,name)
-        for line in child.stdout:publish_safely(cfg,line.rstrip('\n'))
-        raise RuntimeError('inotify process exited')
-    finally:child.terminate();child.wait(timeout=2)
-
+        seen=reconcile(cfg,seen)
+        deadline=time.monotonic()+15
+        while True:
+            rescan=False
+            for key,_ in selector.select(max(0,min(1,deadline-time.monotonic()))):
+                block=os.read(key.fileobj.fileno(),65536)
+                if not block:raise RuntimeError('inotify process exited')
+                pending+=block
+                while b'\n' in pending:
+                    name,pending=pending.split(b'\n',1)
+                    name=name.decode('utf-8',errors='replace')
+                    if not name:rescan=True;continue  # e.g. inotify overflow
+                    process_event(cfg,name,seen)
+            if rescan or time.monotonic()>=deadline:
+                seen=reconcile(cfg,seen);deadline=time.monotonic()+15
+    finally:
+        selector.close();child.terminate();child.wait(timeout=2)

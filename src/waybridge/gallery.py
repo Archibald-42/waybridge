@@ -104,15 +104,14 @@ class Viewer:
             if rc==0 and not new:self.dismissed=True;self.reason='closed by user';self.report();return
             self.reason=f'viewer exited ({rc}); retrying';self.retry_at=time.monotonic()+.3
         if self.process and self.process.poll() is None and time.monotonic()-self.started_at>5:self.attempts=0
-        if self.dismissed or self.attempts>=3 or time.monotonic()<self.retry_at:return
+        if self.dismissed or time.monotonic()<self.retry_at:return
         try:
             if not self.process:self.attempts+=1;self.start(paths)
-            elif new_event:self.reconcile(paths)
+            elif new_event or new:self.reconcile(paths)
         except (OSError,RuntimeError,subprocess.SubprocessError) as error:
             self.close();self.reason=type(error).__name__+': '+str(error)
-            self.retry_at=time.monotonic()+.5;self.report()
+            self.retry_at=time.monotonic()+min(30,.5*2**min(max(0,self.attempts-1),6));self.report()
             print('gallery recovery:',self.reason,flush=True)
-            if self.attempts>=3:print('gallery paused after 3 attempts; inspect gallery-status.json',flush=True)
 
 def serve(cfg):
     signals();cfg.shots.mkdir(parents=True,exist_ok=True,mode=0o700)

@@ -98,11 +98,31 @@ def apply(own,peer,config,old,skip_root=False,integrate=True,start=True):
     print('Проверка соединения: waybridge check')
     return cfg
 
+def update(cfg,config,integrate=True,start=True):
+    """Refresh user components without changing keys, roles or system plans."""
+    from .install import user_install
+    from .control import execute
+    was_running=not cfg.stopped.exists()
+    execute(cfg,'stop')
+    user_install(cfg,config);shell_path()
+    if integrate:wire(cfg,config)
+    run(['systemctl','--user','import-environment','WAYLAND_DISPLAY','HYPRLAND_INSTANCE_SIGNATURE','XDG_CURRENT_DESKTOP'],check=False)
+    if shutil.which('hyprctl'):run(['hyprctl','reload'],check=False)
+    if integrate:reload_panel()
+    if start and was_running:execute(cfg,'start')
+    print('Обновление завершено. Ключи и системные настройки сохранены.')
+    print('Транспорт '+('запущен.' if start and was_running else 'остановлен; запуск: waybridge start'))
+    return 0
+
 def wizard(args):
     if os.geteuid()==0:raise RuntimeError('запускайте setup от обычного пользователя; sudo вызывается только для системных шагов')
     if not os.environ.get('XDG_RUNTIME_DIR'):raise RuntimeError('запустите setup в терминале своей графической сессии')
     config=Path(args.config or default_path()).expanduser().resolve();old=None
     if config.exists():old=load(config)
+    if args.update:
+        if not old:raise RuntimeError('Для обновления нужна существующая установка. Сначала выполните setup без --update.')
+        if args.role or args.peer_profile or args.skip_root:raise ValueError('--update не меняет роли, профили или системные ограничения. Для смены ПК выполните обычный setup.')
+        return update(old,config,not args.no_integrate,not args.no_start)
     if old:print(f'Сейчас: {old.role} · peer {old.peer_ip}. Можно заменить peer или выбрать другую роль.')
     role=args.role or ('client','server')[choose('Роль этого компьютера:',['Клиент — получает файлы, отправляет снимки','Сервер (ПК) — показывает снимки, отправляет файлы'],0 if not old or old.role=='client' else 1)]
     if not args.skip_packages:
