@@ -117,6 +117,16 @@ class GalleryTests(unittest.TestCase):
 
 
 class InstallerTests(unittest.TestCase):
+    def test_helper_short_commands_are_installed_and_shell_valid(self):
+        from waybridge.install import user_install
+        with tempfile.TemporaryDirectory() as td:
+            home=Path(td);c=replace(cfg(home),role='helper')
+            with patch('pathlib.Path.home',return_value=home),patch.dict(os.environ,{'XDG_RUNTIME_DIR':td}),patch('waybridge.install.subprocess.run'),patch('sys.stdout',new_callable=io.StringIO):
+                user_install(c,home/'config.toml')
+            for name in ('wbs','wb-send','wb-send-as','wb-files'):
+                script=home/'.local/bin'/name
+                self.assertTrue(script.stat().st_mode&0o111)
+                subprocess.run(['sh','-n',str(script)],check=True)
     def test_upgrade_removes_legacy_units_and_keeps_project_documents(self):
         from waybridge.install import user_install
         with tempfile.TemporaryDirectory() as td:

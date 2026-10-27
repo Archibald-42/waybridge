@@ -18,6 +18,7 @@ LIMIT=32*1024*1024
 def push(cfg,source,name=None):
     source=Path(source);name=name or source.name
     if not NAME.fullmatch(name):raise ValueError('ASCII filename required')
+    if Path(name).suffix not in SUFFIXES:raise ValueError('unsupported destination extension: '+name)
     with source.open('rb') as f:data=f.read(LIMIT+1)
     if len(data)>LIMIT:raise ValueError('file exceeds 32 MiB')
     cfg.state.mkdir(parents=True,exist_ok=True)
@@ -32,6 +33,22 @@ def push(cfg,source,name=None):
             except subprocess.TimeoutExpired:pass
             if attempt<3:time.sleep(2**attempt)
     raise RuntimeError('SFTP delivery failed; local source preserved')
+
+def push_many(cfg,sources):
+    paths=[Path(source).expanduser() for source in sources]
+    # Validate the entire batch before delivering its first file.
+    for path in paths:
+        if not path.is_file():raise ValueError('not a regular file: '+str(path))
+        if not NAME.fullmatch(path.name):raise ValueError('ASCII filename required: '+path.name)
+        if path.suffix not in SUFFIXES:raise ValueError('unsupported file extension: '+path.name)
+        if path.stat().st_size>LIMIT:raise ValueError('file exceeds 32 MiB: '+path.name)
+    for path in paths:
+        push(cfg,path)
+        print('Отправлено: '+path.name+' → клиент',flush=True)
+
+def remote_files(cfg):
+    result=subprocess.run(['sftp','-q','-b','-','bridge-inbox'],input='ls -lh /inbox\n',text=True,timeout=12)
+    if result.returncode:raise RuntimeError('не удалось открыть входящую папку клиента; проверьте waybridge check')
 
 def watch(folder):
     child=subprocess.Popen(['inotifywait','-m','-e','moved_to,close_write,delete','--format','%f',str(folder)],

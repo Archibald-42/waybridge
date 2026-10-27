@@ -11,7 +11,7 @@ from .integration import jsonc,write,reload_panel
 from .install import legacy_root_cleanup,q
 
 USER_UNITS=['bridge-key-code','bridge-note','bridge-shot-queue','bridge-files','bridge-shot-view','bridge-start','bridge-kill']
-WRAPPERS=['bridge','key-code.py','type-code.py','type-latest.py','bridge-clock.py','note-stream.py','send-answer','battery-link.py','bridge-session-start.sh','shot-send.sh','send-code','push-file.py','shot-queue.py','project-files.py','complete-client-link.py','waybridge']
+WRAPPERS=['bridge','key-code.py','type-code.py','type-latest.py','bridge-clock.py','note-stream.py','send-answer','battery-link.py','bridge-session-start.sh','shot-send.sh','send-code','push-file.py','shot-queue.py','project-files.py','complete-client-link.py','waybridge','wbs','wb-send','wb-send-as','wb-files']
 
 def system_script(user,uid):
     return '''#!/bin/bash

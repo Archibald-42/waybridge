@@ -100,6 +100,12 @@ def user_install(cfg,config):
     else:wrappers={k:v for k,v in wrappers.items() if k not in {'send-code','push-file.py'}}
     for name,args in wrappers.items():
         write(home/'.local/bin'/name,'#!/bin/sh\nexec '+command(config,args)+' "$@"\n',0o755)
+    if cfg.role=='helper':
+        for name,args in (('wbs','send-files'),('wb-send','send-files'),('wb-files','remote-files')):
+            write(home/'.local/bin'/name,'#!/bin/sh\nexec '+command(config,args)+' "$@"\n',0o755)
+        write(home/'.local/bin/wb-send-as','#!/bin/sh\nif [ "$#" -ne 2 ]; then echo "Использование: wb-send-as ФАЙЛ ИМЯ_НА_КЛИЕНТЕ" >&2; exit 2; fi\nexec '+command(config,'send-code')+' "$1" --name "$2"\n',0o755)
+    else:
+        for name in ('wbs','wb-send','wb-send-as','wb-files'):(home/'.local/bin'/name).unlink(missing_ok=True)
     units=home/'.config/systemd/user'
     if cfg.role=='client':
         for name,args,wd in [('bridge-shot-queue','shot serve',True),('bridge-files','files',False)]:

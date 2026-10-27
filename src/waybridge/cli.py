@@ -65,6 +65,8 @@ def main():
     for name in ('files','receive','gallery','session-start'):sub.add_parser(name)
     battery=sub.add_parser('battery');battery.add_argument('--once',action='store_true')
     send=sub.add_parser('send-code');send.add_argument('file');send.add_argument('--name')
+    batch=sub.add_parser('send-files');batch.add_argument('files',nargs='+')
+    sub.add_parser('remote-files')
     tr=sub.add_parser('trigger');tr.add_argument('action',choices=['start','shot','kill']);tr.add_argument('phase',choices=['down','up'],default='down',nargs='?')
     args=p.parse_args()
     try:
@@ -85,7 +87,7 @@ def main():
             run(cfg,args.yes,args.authorizer);return 0
         if cfg.role=='helper' and c in {'shot','files','battery','session-start','trigger'}:
             raise ValueError('this command requires role client')
-        if cfg.role=='client' and c in {'receive','gallery','send-code'}:
+        if cfg.role=='client' and c in {'receive','gallery','send-code','send-files','remote-files'}:
             raise ValueError('this command requires role helper')
         if c=='doctor':return doctor(cfg)
         if c=='check':
@@ -131,6 +133,12 @@ def main():
         elif c=='send-code':
             from .files import push
             push(cfg,args.file,args.name)
+        elif c=='send-files':
+            from .files import push_many
+            push_many(cfg,args.files)
+        elif c=='remote-files':
+            from .files import remote_files
+            remote_files(cfg)
         elif c=='trigger':trigger(cfg,args.action,args.phase)
         elif c=='session-start':
             subprocess.run(['systemctl','--user','import-environment','WAYLAND_DISPLAY','HYPRLAND_INSTANCE_SIGNATURE','XDG_CURRENT_DESKTOP'],check=True,timeout=3)

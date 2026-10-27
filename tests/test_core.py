@@ -61,6 +61,21 @@ class ControlsTests(unittest.TestCase):
             self.assertNotIn(removed,text)
 
 class StorageTests(unittest.TestCase):
+    def test_batch_preflight_and_order(self):
+        from waybridge.files import push_many
+        with tempfile.TemporaryDirectory() as td:
+            c=cfg(Path(td));a=Path(td)/'first.py';b=Path(td)/'second.txt'
+            a.write_text('one');b.write_text('two')
+            with patch('waybridge.files.push') as push,contextlib.redirect_stdout(io.StringIO()) as out:
+                push_many(c,[a,b]);self.assertEqual([call.args[1].name for call in push.call_args_list],['first.py','second.txt'])
+                self.assertIn('first.py',out.getvalue())
+            with patch('waybridge.files.push') as push,self.assertRaises(ValueError):push_many(c,[a,Path(td)/'missing.py'])
+            push.assert_not_called()
+    def test_destination_extension_rejected_before_upload(self):
+        from waybridge.files import push
+        with tempfile.TemporaryDirectory() as td:
+            c=cfg(Path(td));source=Path(td)/'source.py';source.write_text('code')
+            with self.assertRaises(ValueError):push(c,source,'payload.exe')
     def test_cli_error_returns_nonzero(self):
         with tempfile.TemporaryDirectory() as td:
             result=subprocess.run([sys.executable,'-m','waybridge','--config',str(Path(td)/'missing.toml'),'doctor'],capture_output=True)
