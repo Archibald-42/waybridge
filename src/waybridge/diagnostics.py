@@ -6,7 +6,7 @@ import socket
 import subprocess
 from .control import units
 
-def helper_health(cfg):
+def server_health(cfg):
     env={**os.environ,'XDG_RUNTIME_DIR':f'/run/user/{os.getuid()}'}
     r=subprocess.run(['systemctl','--user','is-active','bridge-shot-view.service'],capture_output=True,text=True,timeout=2,env=env)
     try:viewer=json.loads((cfg.state/'gallery-status.json').read_text())
@@ -30,6 +30,17 @@ def check(cfg):
         for name in items:
             r=subprocess.run(prefix+['is-active',name],capture_output=True,text=True,timeout=3)
             result(name,r.stdout.strip()=='active',r.stdout.strip())
+    if cfg.role=='client':
+        result('Входящая папка доступна',os.access(cfg.inbox,os.R_OK|os.X_OK),str(cfg.inbox))
+        result('Папка файлов доступна для записи',os.access(cfg.projects,os.W_OK|os.X_OK),str(cfg.projects))
+        failures=[]
+        for marker in cfg.inbox.glob('.delivery-*.json'):
+            try:
+                identifier=marker.name[len('.delivery-'):-len('.json')]
+                value=json.loads((cfg.inbox/'.receipts'/(identifier+'.json')).read_text())
+                if value.get('ok') is False:failures.append(value.get('name','?')+': '+value.get('error','ошибка сохранения'))
+            except (OSError,ValueError):pass
+        result('Ошибки сохранения файлов',not failures,'нет' if not failures else '; '.join(failures[:3]))
     alias='bridge-shot' if cfg.role=='client' else 'bridge-inbox'
     try:
         if cfg.role=='client':

@@ -42,9 +42,14 @@ def rpc(path,command):
                 if attempt==19:raise RuntimeError('service is not ready')
                 time.sleep(.05);continue
             s.sendall(payload)
-            response=s.recv(4096)
-        if not response:raise RuntimeError('empty response')
-        result=json.loads(response)
+            response=bytearray()
+            while b'\n' not in response:
+                block=s.recv(4096)
+                if not block:raise RuntimeError('incomplete service response')
+                response.extend(block)
+                if len(response)>16384:raise RuntimeError('service response too large')
+        result=json.loads(bytes(response).split(b'\n',1)[0])
+        if not isinstance(result,dict):raise RuntimeError('invalid service response')
         if not result.get('ok',False):raise RuntimeError(result.get('error','request rejected'))
         return result
 

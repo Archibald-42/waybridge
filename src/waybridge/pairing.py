@@ -29,7 +29,8 @@ def public_key(value):
 def validate(data):
     if not isinstance(data,dict) or data.get('format')!=FORMAT:raise ValueError('not a Waybridge pairing profile')
     if set(data)!={'format','role','user','ip','auth_key','host_key','hostname'}:raise ValueError('unexpected profile fields')
-    if data['role'] not in {'client','helper'}:raise ValueError('invalid profile role')
+    data={**data,'role':'server' if data.get('role')=='helper' else data.get('role')}
+    if data['role'] not in {'client','server'}:raise ValueError('invalid profile role')
     if not isinstance(data['user'],str) or not ACCOUNT.fullmatch(data['user']):raise ValueError('invalid Linux account')
     if not isinstance(data['ip'],str) or ipaddress.IPv4Address(data['ip']) not in ipaddress.IPv4Network('100.64.0.0/10'):raise ValueError('Tailscale IPv4 required')
     if not isinstance(data['hostname'],str) or not re.fullmatch(r'[A-Za-z0-9_.-]{1,100}',data['hostname']):raise ValueError('invalid hostname')
@@ -46,7 +47,7 @@ def fingerprint(profile):
     return '-'.join(code[i:i+4] for i in range(0,12,4))
 
 def local(role):
-    if role not in {'client','helper'}:raise ValueError('choose client or helper')
+    if role not in {'client','server'}:raise ValueError('choose client or server')
     user=pwd.getpwuid(os.getuid()).pw_name
     key=Path.home()/'.ssh'/('bridge-shot' if role=='client' else 'bridge-inbox')
     key.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
@@ -67,10 +68,10 @@ def export(role,output=None):
 
 def configuration(own,peer,previous=None):
     own=validate(own);peer=validate(peer)
-    if own['role']==peer['role']:raise ValueError('pair must contain one client and one helper')
+    if own['role']==peer['role']:raise ValueError('pair must contain one client and one server')
     if own['ip']==peer['ip']:raise ValueError('choose the OTHER device profile')
     data=dict(previous or {})
-    for key in ('keyboard','hold_ms','api_timeout','loop_limit'):data.pop(key,None)
+    for key in ('keyboard','hold_ms','api_timeout','loop_limit','helper_user'):data.pop(key,None)
     data.update(role=own['role'],own_ip=own['ip'],peer_ip=peer['ip'],user=own['user'],
-                helper_user=peer['user'] if own['role']=='client' else own['user'])
+                server_user=peer['user'] if own['role']=='client' else own['user'])
     return data

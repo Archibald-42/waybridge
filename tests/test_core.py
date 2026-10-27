@@ -98,7 +98,7 @@ class StorageTests(unittest.TestCase):
             self.assertFalse(publish(c,'../main.py'));self.assertFalse(publish(c,'missing.txt'))
     def test_config_validation(self):
         with tempfile.TemporaryDirectory() as td:
-            p=Path(td)/'config.toml';p.write_text('role="client"\nown_ip="100.64.0.2"\npeer_ip="8.8.8.8"\nuser="archi"\nhelper_user="archi"\n')
+            p=Path(td)/'config.toml';p.write_text('role="client"\nown_ip="100.64.0.2"\npeer_ip="8.8.8.8"\nuser="archi"\nserver_user="archi"\n')
             with self.assertRaises(ValueError):load(p)
 
 if __name__=='__main__':unittest.main()

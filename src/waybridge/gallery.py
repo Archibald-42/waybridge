@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 import time
 from .files import watch
-from .runtime import atomic,signals
+from .runtime import atomic,signals,notify
 
 IMAGE=re.compile(r'[a-f0-9]{32}\.png')
 
@@ -124,6 +124,7 @@ def serve(cfg):
     pending=b''
     try:
         viewer.refresh(True)
+        notify('READY=1\nSTATUS=Image watcher ready')
         while True:
             changed=False
             for key,_ in selector.select(.2):

@@ -65,7 +65,7 @@ def run(cfg,yes=False,authorizer='sudo'):
     lua=home/'.config/hypr/hyprland.lua'
     if lua.exists():
         lines=lua.read_text().splitlines(keepends=True)
-        write(lua,''.join(line for line in lines if not (any(name in line for name in ('hypr-client.lua','hypr-helper.lua','/.config/bridge/helper-start.lua')) and 'dofile' in line)))
+        write(lua,''.join(line for line in lines if not (any(name in line for name in ('hypr-client.lua','hypr-server.lua','hypr-helper.lua','/.config/bridge/helper-start.lua')) and 'dofile' in line)))
     for bar in (home/'.config/waybar/config.jsonc',home/'.config/waybar/config'):
         if not bar.exists():continue
         data=jsonc(bar.read_text());bars=data if isinstance(data,list) else [data]

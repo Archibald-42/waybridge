@@ -1,4 +1,4 @@
-# Validation · 3.5.1
+# Validation · 3.5.2
 
 Automated checks cover PNG framing/CRC/hash/limits, deduplication, queue budgets,
 atomic file projection and backup, symlink rejection, pairing validation, first-shot
@@ -7,3 +7,8 @@ Waybar native clock plus battery-only integration, and removal of retired comman
 
 Live clean installation results are recorded after publication in GitHub release
 notes. A passed unit test alone does not establish successful hardware deployment.
+
+3.5.2 adds regression tests for startup rollback, stop without network/GUI,
+queue readiness, legacy-role normalization, per-transfer UUID/hash confirmation,
+update confirmation, and isolation of a broken destination. Deployment findings
+are recorded in GitHub release notes after live validation.

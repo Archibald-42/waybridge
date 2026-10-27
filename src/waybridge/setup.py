@@ -104,7 +104,7 @@ def wizard(args):
     config=Path(args.config or default_path()).expanduser().resolve();old=None
     if config.exists():old=load(config)
     if old:print(f'Сейчас: {old.role} · peer {old.peer_ip}. Можно заменить peer или выбрать другую роль.')
-    role=args.role or ('client','helper')[choose('Роль этого компьютера:',['Клиент — получает файлы, отправляет снимки','Помощник — показывает снимки, отправляет файлы'],0 if not old or old.role=='client' else 1)]
+    role=args.role or ('client','server')[choose('Роль этого компьютера:',['Клиент — получает файлы, отправляет снимки','Сервер (ПК) — показывает снимки, отправляет файлы'],0 if not old or old.role=='client' else 1)]
     if not args.skip_packages:
         packages=['python','tailscale','openssh','nftables','inotify-tools']+(['acl','grim','waybar'] if role=='client' else ['imv'])
         print('\nУстановка зависимостей через pacman. sudo нужен только для системной настройки.')

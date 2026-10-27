@@ -30,10 +30,10 @@ class PairingTests(unittest.TestCase):
         for value in ('-----BEGIN OPENSSH PRIVATE KEY-----','ssh-ed25519 aaaa','rsa AAAA'):
             with self.assertRaises(ValueError):public_key(value)
         with self.assertRaises(ValueError):validate({**profile(),'private_key':'never allowed'})
-    def test_role_swap_preserves_projects_and_updates_helper_user(self):
-        own=profile('helper','100.64.0.1');peer=profile()
+    def test_role_swap_preserves_projects_and_updates_server_user(self):
+        own=profile('server','100.64.0.1');peer=profile()
         data=configuration(own,peer,{'projects':'/home/test/projects','role':'client'})
-        self.assertEqual(data['role'],'helper');self.assertEqual(data['projects'],'/home/test/projects')
+        self.assertEqual(data['role'],'server');self.assertEqual(data['projects'],'/home/test/projects')
         self.assertEqual(data['peer_ip'],'100.64.0.2')
         with self.assertRaises(ValueError):configuration(peer,peer)
     def test_profiles_bounded_and_bad_role_rejected(self):
@@ -46,12 +46,12 @@ class PairingTests(unittest.TestCase):
           "url":"https://example.com/*x*/", "list":["clock",], /* ignored */
         }''')
         self.assertEqual(data,{'url':'https://example.com/*x*/','list':['clock']})
-    def test_helper_units_and_status_do_not_probe_keyboard(self):
-        c=replace(cfg(Path('/tmp')),role='helper')
+    def test_server_units_and_status_do_not_probe_keyboard(self):
+        c=replace(cfg(Path('/tmp')),role='server')
         self.assertEqual(units(c),(['bridge-shot-view.service'],['bridge-shot.service']))
         with patch('waybridge.control.run',return_value=subprocess.CompletedProcess([],0,'active\n','')):
             value=status(c)
-        self.assertNotIn('input',value);self.assertEqual(value['role'],'helper')
+        self.assertNotIn('input',value);self.assertEqual(value['role'],'server')
 
 class GalleryTests(unittest.TestCase):
     def test_safe_pruning_keeps_imv_selection_in_bounds(self):
@@ -111,16 +111,16 @@ class GalleryTests(unittest.TestCase):
     def test_health_request_is_authenticated_transport_without_image_write(self):
         with tempfile.TemporaryDirectory() as td:
             c=cfg(Path(td))
-            with patch('waybridge.diagnostics.helper_health',return_value={'ok':True,'protocol':'WB1'}),patch('sys.stdout',new_callable=io.StringIO) as output:
+            with patch('waybridge.diagnostics.server_health',return_value={'ok':True,'protocol':'WB1'}),patch('sys.stdout',new_callable=io.StringIO) as output:
                 receive(c,io.BytesIO(b'WBH1\n'))
             self.assertEqual(json.loads(output.getvalue())['protocol'],'WB1');self.assertFalse(c.shots.exists())
 
 
 class InstallerTests(unittest.TestCase):
-    def test_helper_short_commands_are_installed_and_shell_valid(self):
+    def test_server_short_commands_are_installed_and_shell_valid(self):
         from waybridge.install import user_install
         with tempfile.TemporaryDirectory() as td:
-            home=Path(td);c=replace(cfg(home),role='helper')
+            home=Path(td);c=replace(cfg(home),role='server')
             with patch('pathlib.Path.home',return_value=home),patch.dict(os.environ,{'XDG_RUNTIME_DIR':td}),patch('waybridge.install.subprocess.run'),patch('sys.stdout',new_callable=io.StringIO):
                 user_install(c,home/'config.toml')
             for name in ('wbs','wb-send','wb-send-as','wb-files'):
@@ -153,7 +153,7 @@ class InstallerTests(unittest.TestCase):
         subprocess.run(['bash','-n'],input=script,text=True,check=True)
     def test_role_plans_stop_old_endpoints_and_reload_firewall(self):
         from waybridge.install import root_plan
-        for role in ('client','helper'):
+        for role in ('client','server'):
             with self.subTest(role=role),tempfile.TemporaryDirectory() as td:
                 root=Path(td);c=replace(cfg(root),role=role,inbox=Path('/srv/bridge/inbox'))
                 key=root/'peer.pub';key.write_text(KEY+'\n');plan=root/'plan.sh'
@@ -179,7 +179,7 @@ class InstallerTests(unittest.TestCase):
                 self.assertNotIn('helper-start.lua',lua.read_text())
                 self.assertEqual(json.loads(bar.read_text())['modules-center'],['clock'])
                 self.assertEqual(json.loads(bar.read_text())['modules-right'],['custom/battery'])
-                wire(replace(c,role='helper'),home/'config.toml')
+                wire(replace(c,role='server'),home/'config.toml')
                 self.assertEqual(json.loads(bar.read_text())['modules-center'],['clock'])
                 self.assertEqual(json.loads(bar.read_text())['modules-right'],['battery'])
 

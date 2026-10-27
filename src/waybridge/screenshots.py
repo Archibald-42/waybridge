@@ -28,6 +28,11 @@ class Budget:
 def serve(cfg):
     signals();requests=queue.Queue(cfg.queue_count);frames=queue.Queue(cfg.queue_count)
     budget=Budget(cfg.queue_count,cfg.queue_bytes);stop=threading.Event()
+    info={'last_error':None,'last_delivered':None,'delivered':0};info_lock=threading.Lock()
+    def record(error=None,delivered=None):
+        with info_lock:
+            info['last_error']=str(error)[:300] if error else None
+            if delivered:info['last_delivered']=delivered;info['delivered']+=1
     def capture():
         while not stop.is_set():
             try:identifier=requests.get(timeout=.2)
@@ -45,7 +50,8 @@ def serve(cfg):
                 frames.put((identifier,r.stdout),timeout=1)
             except Exception as e:
                 budget.release(size if attached else 0)
-                print('capture rejected:',type(e).__name__,flush=True)
+                record(error=type(e).__name__+': '+str(e))
+                print('capture rejected:',type(e).__name__,str(e),flush=True)
             finally:requests.task_done()
     def transmit():
         while not stop.is_set():
@@ -61,7 +67,11 @@ def serve(cfg):
                         if r.returncode==0 and verify_ack(r.stdout,header):delivered=True;break
                     except subprocess.TimeoutExpired:pass
                     if stop.wait(min(2**attempt,4)):break
+                record(delivered=identifier) if delivered else record(error='Доставка снимка не подтверждена: '+identifier)
                 print('delivery '+('confirmed' if delivered else 'failed')+' id='+identifier,flush=True)
+            except (OSError,ValueError,subprocess.SubprocessError) as error:
+                record(error=error)
+                print('delivery error: '+str(error),flush=True)
             finally:budget.release(len(png));frames.task_done()
     workers=[threading.Thread(target=capture,daemon=True),threading.Thread(target=transmit,daemon=True)]
     for worker in workers:worker.start()
@@ -76,7 +86,9 @@ def serve(cfg):
             with conn:
                 try:
                     command=read_command(conn)
-                    if command=='status':respond(conn,{'ok':True,**budget.status()})
+                    if command=='status':
+                        with info_lock:snapshot=dict(info)
+                        respond(conn,{'ok':True,**budget.status(),**snapshot})
                     elif command!='shot':raise ValueError('invalid command')
                     elif cfg.stopped.exists():raise RuntimeError('bridge stopped')
                     elif not budget.reserve():raise RuntimeError('queue count limit reached')

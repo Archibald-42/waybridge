@@ -15,8 +15,8 @@ def receive(cfg,stream=None):
         source=stream or sys.stdin.buffer;first=source.read(4)
         if first==b'WBH1':
             if source.read(2)!=b'\n':raise ValueError('invalid health request')
-            from .diagnostics import helper_health
-            print(json.dumps(helper_health(cfg)),flush=True);return
+            from .diagnostics import server_health
+            print(json.dumps(server_health(cfg)),flush=True);return
         return _receive(cfg,source,first)
     finally:signal.alarm(0)
 

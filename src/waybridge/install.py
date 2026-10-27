@@ -13,7 +13,7 @@ def q(value):return shlex.quote(str(value))
 def executable():return Path(sys.executable).parent/'waybridge'
 def command(config,args):return q(executable())+' --config '+q(config)+' '+args
 
-def unit(config,args,watchdog=False):
+def unit(config,args,watchdog=False,ready=False):
     return '''[Unit]
 Description=Waybridge '''+args+'''
 PartOf=graphical-session.target
@@ -21,7 +21,7 @@ StartLimitIntervalSec=60
 StartLimitBurst=3
 
 [Service]
-Type='''+('notify' if watchdog else 'simple')+'\nExecStart='+command(config,args)+'''
+Type='''+('notify' if watchdog or ready else 'simple')+'\nExecStart='+command(config,args)+'''
 Restart=on-failure
 RestartSec=2
 TimeoutStartSec=10
@@ -78,6 +78,8 @@ def cleanup_user(cfg):
         (home/'.local/bin'/name).unlink(missing_ok=True)
     for name in ('note-waybar.jsonc','note-waybar.css','waybar-modules.json'):
         (home/'.config/bridge'/name).unlink(missing_ok=True)
+    (home/'.config/bridge/hypr-helper.lua').unlink(missing_ok=True)
+    (home/'.config/bridge/helper-start.lua').unlink(missing_ok=True)
     for name in ('latest-code','clock-hidden','input-state.json'):
         (cfg.state/name).unlink(missing_ok=True)
     for name in ('bridge-key-code.sock','waybridge-hold-input','waybridge-hold-reset','waybridge-hold-clock'):
@@ -96,11 +98,11 @@ def user_install(cfg,config):
         atomic(path,data.encode());path.chmod(mode)
     cleanup_user(cfg)
     wrappers={'bridge':'control','shot-send.sh':'shot request','battery-link.py':'battery','bridge-session-start.sh':'session-start','send-code':'send-code','push-file.py':'send-code'}
-    if cfg.role=='helper':wrappers={k:v for k,v in wrappers.items() if k in {'bridge','send-code','push-file.py'}}
+    if cfg.role=='server':wrappers={k:v for k,v in wrappers.items() if k in {'bridge','send-code','push-file.py'}}
     else:wrappers={k:v for k,v in wrappers.items() if k not in {'send-code','push-file.py'}}
     for name,args in wrappers.items():
         write(home/'.local/bin'/name,'#!/bin/sh\nexec '+command(config,args)+' "$@"\n',0o755)
-    if cfg.role=='helper':
+    if cfg.role=='server':
         for name,args in (('wbs','send-files'),('wb-send','send-files'),('wb-files','remote-files')):
             write(home/'.local/bin'/name,'#!/bin/sh\nexec '+command(config,args)+' "$@"\n',0o755)
         write(home/'.local/bin/wb-send-as','#!/bin/sh\nif [ "$#" -ne 2 ]; then echo "Использование: wb-send-as ФАЙЛ ИМЯ_НА_КЛИЕНТЕ" >&2; exit 2; fi\nexec '+command(config,'send-code')+' "$1" --name "$2"\n',0o755)
@@ -109,17 +111,17 @@ def user_install(cfg,config):
     units=home/'.config/systemd/user'
     if cfg.role=='client':
         for name,args,wd in [('bridge-shot-queue','shot serve',True),('bridge-files','files',False)]:
-            text=unit(config,args,wd)
+            text=unit(config,args,wd,ready=name=='bridge-files')
             write(units/(name+'.service'),text)
         for name,action in [('bridge-start','start'),('bridge-kill','stop')]:
             write(units/(name+'.service'),'[Unit]\nDescription=Waybridge '+action+'\n[Service]\nType=oneshot\nTimeoutStartSec=45\nExecStart='+command(config,'control '+action)+'\n')
-        write(home/'.config/bridge/hypr-helper.lua','-- Helper startup disabled: this device is now a client.\n')
+        write(home/'.config/bridge/hypr-server.lua','-- Server startup disabled: this device is now a client.\n')
         bridge=home/'.config/bridge';bridge.mkdir(parents=True,exist_ok=True)
         write(bridge/'hypr-client.lua',bindings(config))
     else:
-        write(units/'bridge-shot-view.service',unit(config,'gallery'))
-        write(home/'.config/bridge/hypr-client.lua','-- Client controls disabled: this device is now a helper.\n')
-        write(home/'.config/bridge/hypr-helper.lua','hl.on(\"hyprland.start\", function() hl.exec_cmd('+json.dumps(command(config,'helper-start'))+') end)\n')
+        write(units/'bridge-shot-view.service',unit(config,'gallery',ready=True))
+        write(home/'.config/bridge/hypr-client.lua','-- Client controls disabled: this device is now a server.\n')
+        write(home/'.config/bridge/hypr-server.lua','hl.on(\"hyprland.start\", function() hl.exec_cmd('+json.dumps(command(config,'server-start'))+') end)\n')
     subprocess.run(['systemctl','--user','daemon-reload'],check=True,timeout=5)
     print('Installed user files. Backup:',backup)
     print('Client module:',home/'.config/bridge/hypr-client.lua')
@@ -220,7 +222,7 @@ ExecStart=/usr/bin/nft -f /etc/bridge/bridge-filter.nft
 WantedBy=multi-user.target
 ''')
     text+='nft -c -f /etc/bridge/bridge-filter.nft\nsshd -t -f '+q(conf)+'\nsystemctl daemon-reload\nsystemctl enable bridge-filter.service\nsystemctl restart bridge-filter.service\n'
-    if cfg.role=='helper':text+='systemctl disable bridge-shot.service\necho \"Use waybridge start in the graphical session\"\n'
+    if cfg.role=='server':text+='systemctl disable bridge-shot.service\necho \"Use waybridge start in the graphical session\"\n'
     else:text+='systemctl disable bridge-inbox.service\necho "Use waybridge start in the graphical session"\n'
     atomic(output,text.encode());output.chmod(0o700);print(output)
 
@@ -238,7 +240,7 @@ def link(cfg,hostkey):
     fragment=ssh/'bridge.conf'
     backup=ssh/('bridge.conf.backup-'+time.strftime('%Y%m%d-%H%M%S'))
     if fragment.exists():shutil.copy2(fragment,backup)
-    user=cfg.helper_user if cfg.role=='client' else 'bridge'
+    user=cfg.server_user if cfg.role=='client' else 'bridge'
     text=f'Host {alias}\n    HostName {cfg.peer_ip}\n    Port {port}\n    User {user}\n    IdentityFile {ssh/alias}\n    IdentitiesOnly yes\n    BatchMode yes\n    StrictHostKeyChecking yes\n    UserKnownHostsFile {known}\n    ConnectTimeout 8\n    ServerAliveInterval 5\n    ServerAliveCountMax 2\n    RequestTTY no\n'
     atomic(fragment,text.encode())
     config=ssh/'config';old=config.read_text() if config.exists() else ''

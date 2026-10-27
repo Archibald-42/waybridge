@@ -7,14 +7,14 @@ import pwd
 import subprocess
 import sys
 import time
-from .config import load, default_path
+from .config import load, default_path,role
 from .runtime import atomic, rpc
 
 def initialize(args):
     own=subprocess.check_output(['tailscale','ip','-4'],text=True,timeout=3).strip()
     user=pwd.getpwuid(os.getuid()).pw_name
     data={'role':args.role,'own_ip':own,'peer_ip':args.peer_ip,'user':user,
-          'helper_user':args.helper_user or user}
+          'server_user':args.server_user or user}
     path=Path(args.config or default_path())
     if path.exists():raise RuntimeError('configuration already exists; edit it explicitly')
     atomic(path,('\n'.join(k+' = '+json.dumps(v) for k,v in data.items())+'\n').encode())
@@ -48,16 +48,16 @@ def main():
     from . import __version__
     p=argparse.ArgumentParser(prog='waybridge');p.add_argument('--config');p.add_argument('--version',action='version',version='%(prog)s '+__version__)
     sub=p.add_subparsers(dest='command',required=True)
-    init=sub.add_parser('init');init.add_argument('--role',choices=['client','helper'],required=True);init.add_argument('--peer-ip',required=True);init.add_argument('--helper-user')
+    init=sub.add_parser('init');init.add_argument('--role',type=role,choices=['client','server'],required=True);init.add_argument('--peer-ip',required=True);init.add_argument('--server-user')
     sub.add_parser('doctor');sub.add_parser('install-user');sub.add_parser('check')
     uninstall=sub.add_parser('uninstall');uninstall.add_argument('--yes',action='store_true');uninstall.add_argument('--authorizer',choices=['sudo','pkexec'],default='sudo')
-    setup=sub.add_parser('setup');setup.add_argument('--role',choices=['client','helper']);setup.add_argument('--peer-profile');setup.add_argument('--yes',action='store_true')
+    setup=sub.add_parser('setup');setup.add_argument('--role',type=role,choices=['client','server']);setup.add_argument('--peer-profile');setup.add_argument('--yes',action='store_true')
     for flag in ('skip-packages','skip-root','no-start','no-integrate'):setup.add_argument('--'+flag,action='store_true')
     pair=sub.add_parser('pair');ps=pair.add_subparsers(dest='pair_action',required=True)
-    exp=ps.add_parser('export');exp.add_argument('--role',choices=['client','helper']);exp.add_argument('--output')
+    exp=ps.add_parser('export');exp.add_argument('--role',type=role,choices=['client','server']);exp.add_argument('--output')
     show=ps.add_parser('show');show.add_argument('file')
     for action in ('start','stop','status'):sub.add_parser(action)
-    sub.add_parser('helper-start')
+    sub.add_parser('server-start')
     link=sub.add_parser('link');link.add_argument('--peer-host-key',required=True)
     root=sub.add_parser('root-plan');root.add_argument('--peer-key',required=True);root.add_argument('--output',required=True)
     for name,choices in [('control',['start','stop','status']),('shot',['serve','request','status'])]:
@@ -85,10 +85,10 @@ def main():
         if c=='uninstall':
             from .uninstall import run
             run(cfg,args.yes,args.authorizer);return 0
-        if cfg.role=='helper' and c in {'shot','files','battery','session-start','trigger'}:
+        if cfg.role=='server' and c in {'shot','files','battery','session-start','trigger'}:
             raise ValueError('this command requires role client')
         if cfg.role=='client' and c in {'receive','gallery','send-code','send-files','remote-files'}:
-            raise ValueError('this command requires role helper')
+            raise ValueError('this command requires role server')
         if c=='doctor':return doctor(cfg)
         if c=='check':
             from .diagnostics import check
@@ -96,8 +96,8 @@ def main():
         if c in {'start','stop','status'}:
             from .control import execute
             print(json.dumps(execute(cfg,c),ensure_ascii=False,indent=2));return 0
-        if c=='helper-start':
-            if cfg.role!='helper':raise ValueError('helper role required')
+        if c=='server-start':
+            if cfg.role!='server':raise ValueError('server role required')
             subprocess.run(['systemctl','--user','import-environment','WAYLAND_DISPLAY','HYPRLAND_INSTANCE_SIGNATURE','XDG_CURRENT_DESKTOP'],check=True,timeout=3)
             if not cfg.stopped.exists():
                 from .control import execute

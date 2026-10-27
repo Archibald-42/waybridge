@@ -60,12 +60,12 @@ def jsonc(text):
 
 def wire(cfg,config):
     from .install import command
-    home=Path.home();module='hypr-client.lua' if cfg.role=='client' else 'hypr-helper.lua'
+    home=Path.home();module='hypr-client.lua' if cfg.role=='client' else 'hypr-server.lua'
     lua=home/'.config/hypr/hyprland.lua'
     if lua.exists():
         original=lua.read_text()
         text=''.join(line for line in original.splitlines(keepends=True)
-                     if not ('dofile' in line and '/.config/bridge/helper-start.lua' in line))
+                     if not ('dofile' in line and any(name in line for name in ('/.config/bridge/helper-start.lua','/.config/bridge/hypr-helper.lua'))))
         if module not in text:text+='\n-- Waybridge session module\ndofile(os.getenv("HOME") .. "/.config/bridge/'+module+'")\n'
         if text!=original:write(lua,text)
         print('Hyprland: модуль подключён.')

@@ -1,6 +1,6 @@
-# UX · 3.5.1
+# UX · 3.5.2
 
-The installation flow is `git clone --branch v3.5.1`, then `bash setup.sh` on both
+The installation flow is `git clone --branch v3.5.2`, then `bash setup.sh` on both
 machines and exchange of public pairing profiles. No keyboard selection, evdev ACL
 or input daemon is involved. The client has exactly three Numpad actions: start,
 screenshot, stop. Waybar uses its native clock and an optional transport-tinted

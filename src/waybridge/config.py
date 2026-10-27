@@ -12,7 +12,7 @@ class Config:
     peer_ip: str
     own_ip: str
     user: str
-    helper_user: str
+    server_user: str
     inbox: Path
     projects: Path
     state: Path
@@ -32,15 +32,20 @@ class Config:
 def default_path():
     return Path(os.environ.get('WAYBRIDGE_CONFIG', Path.home()/'.config/waybridge/config.toml'))
 
+def role(value):
+    return "server" if value=="helper" else value
+
 def load(path=None):
     with Path(path or default_path()).open('rb') as f: data=tomllib.load(f)
     home=Path.home()
-    if data.get('role') not in {'client','helper'}: raise ValueError('role must be client or helper')
+    data['role']=role(data.get('role'))
+    if 'server_user' not in data and 'helper_user' in data:data['server_user']=data['helper_user']
+    if data.get('role') not in {'client','server'}: raise ValueError('role must be client or server')
     for field in ('own_ip','peer_ip'):
         if not isinstance(data.get(field),str):raise ValueError('IP fields must be strings')
         ip=ipaddress.IPv4Address(data[field])
         if ip not in ipaddress.IPv4Network('100.64.0.0/10'): raise ValueError('Tailscale IPv4 required')
-    for field in ('user','helper_user'):
+    for field in ('user','server_user'):
         if not isinstance(data.get(field),str) or not re.fullmatch(r'[a-z_][a-z0-9_-]{0,31}',data[field]): raise ValueError('invalid account name')
     def path_value(key,default):
         raw=data.get(key,str(default))
@@ -48,7 +53,7 @@ def load(path=None):
         value=Path(raw).expanduser()
         if not value.is_absolute() or '\n' in str(value): raise ValueError('absolute paths without newlines required')
         return value
-    c=Config(data['role'],data['peer_ip'],data['own_ip'],data['user'],data['helper_user'],
+    c=Config(data['role'],data['peer_ip'],data['own_ip'],data['user'],data['server_user'],
              path_value('inbox','/srv/bridge/inbox'),path_value('projects',home/'Documents/projects'),
              path_value('state',home/'.cache/bridge'),
              **{k:data[k] for k in ('queue_count','queue_bytes','png_limit') if k in data})
