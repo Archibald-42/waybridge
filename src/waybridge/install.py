@@ -88,6 +88,24 @@ def cleanup_user(cfg):
         for name in ('clock.txt','clock.json','answer.txt'):
             (cfg.inbox/name).unlink(missing_ok=True)
 
+def install_page_export(cfg,config,write):
+    from .pages import EXTENSION_ID,HOST_NAME
+    home=Path.home()
+    manifests=[home/'.mozilla/native-messaging-hosts'/(HOST_NAME+'.json'),
+               home/'.config/mozilla/native-messaging-hosts'/(HOST_NAME+'.json')]
+    wrapper=home/'.local/libexec/waybridge-page-native'
+    assets=home/'.local/share/waybridge/firefox-export'
+    if cfg.role!='client':
+        for path in manifests+[wrapper]:path.unlink(missing_ok=True)
+        if assets.is_dir():shutil.rmtree(assets)
+        return
+    write(wrapper,'#!/bin/sh\nexec '+command(config,'page-native')+'\n',0o755)
+    manifest={'name':HOST_NAME,'description':'Waybridge page snapshot transport',
+              'path':str(wrapper),'type':'stdio','allowed_extensions':[EXTENSION_ID]}
+    for path in manifests:write(path,json.dumps(manifest,indent=2)+'\n',0o600)
+    for source in (Path(__file__).parent/'browser/firefox').iterdir():
+        if source.is_file():write(assets/source.name,source.read_text())
+
 def user_install(cfg,config):
     home=Path.home();backup=home/'.local/state/waybridge/backups'/time.strftime('%Y%m%d-%H%M%S')
     def write(path,data,mode=0o644):
@@ -96,6 +114,7 @@ def user_install(cfg,config):
             dest=backup/path.relative_to(home);dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(path,dest)
         atomic(path,data.encode());path.chmod(mode)
     cleanup_user(cfg)
+    install_page_export(cfg,config,write)
     wrappers={'bridge':'control','shot-send.sh':'shot request','battery-link.py':'battery','bridge-session-start.sh':'session-start','send-code':'send-code','push-file.py':'send-code'}
     if cfg.role=='server':wrappers={k:v for k,v in wrappers.items() if k in {'bridge','send-code','push-file.py'}}
     else:wrappers={k:v for k,v in wrappers.items() if k not in {'send-code','push-file.py'}}
@@ -141,7 +160,7 @@ set -Eeuo pipefail
     text+='target_user='+q(cfg.user)+'\ntarget_uid='+str(uid)+'\n'
     text+='[[ $(id -u "$target_user") == "$target_uid" ]] || exit 1\n'
     text+='[[ $(tailscale ip -4) == '+q(cfg.own_ip)+' ]] || { echo "Tailscale IP changed"; exit 1; }\n'
-    dependencies='openssh nftables python inotify-tools '+('acl grim' if cfg.role=='client' else 'imv')
+    dependencies='openssh nftables python inotify-tools '+('acl grim' if cfg.role=='client' else 'imv xdg-utils')
     text+='pacman -S --needed --noconfirm '+dependencies+'\n'
     text+='for unit in bridge-inbox.service ydotool-bridge.service bridge-shot.service; do systemctl stop \"$unit\" 2>/dev/null || true; done\n'
     if cfg.role=='client':text+='systemctl disable bridge-shot.service 2>/dev/null || true\n'

@@ -62,7 +62,7 @@ def main():
     root=sub.add_parser('root-plan');root.add_argument('--peer-key',required=True);root.add_argument('--output',required=True)
     for name,choices in [('control',['start','stop','status']),('shot',['serve','request','status'])]:
         sp=sub.add_parser(name);sp.add_argument('action',choices=choices)
-    for name in ('files','receive','gallery','session-start'):sub.add_parser(name)
+    for name in ('files','receive','gallery','session-start','page-native'):sub.add_parser(name)
     battery=sub.add_parser('battery');battery.add_argument('--once',action='store_true')
     send=sub.add_parser('send-code');send.add_argument('file');send.add_argument('--name')
     batch=sub.add_parser('send-files');batch.add_argument('files',nargs='+')
@@ -85,7 +85,7 @@ def main():
         if c=='uninstall':
             from .uninstall import run
             run(cfg,args.yes,args.authorizer);return 0
-        if cfg.role=='server' and c in {'shot','files','battery','session-start','trigger'}:
+        if cfg.role=='server' and c in {'shot','files','battery','session-start','trigger','page-native'}:
             raise ValueError('this command requires role client')
         if cfg.role=='client' and c in {'receive','gallery','send-code','send-files','remote-files'}:
             raise ValueError('this command requires role server')
@@ -124,6 +124,9 @@ def main():
             if c=='files':from .files import serve
             else:from .gallery import serve
             serve(cfg)
+        elif c=='page-native':
+            from .pages import native
+            native(cfg)
         elif c=='receive':
             from .receiver import receive
             receive(cfg)

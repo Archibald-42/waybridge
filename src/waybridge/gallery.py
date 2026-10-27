@@ -10,6 +10,7 @@ import tempfile
 import time
 from .files import watch
 from .runtime import atomic,signals,notify
+from .pages import PageViewer
 
 IMAGE=re.compile(r'[a-f0-9]{32}\.png')
 
@@ -118,7 +119,7 @@ def serve(cfg):
     import shutil
     for leftover in cfg.state.glob('gallery-*'):
         if leftover.is_dir() and not leftover.is_symlink():shutil.rmtree(leftover)
-    child=watch(cfg.shots);viewer=Viewer(cfg);selector=selectors.DefaultSelector()
+    child=watch(cfg.shots);viewer=Viewer(cfg);pages=PageViewer(cfg);selector=selectors.DefaultSelector()
     os.set_blocking(child.stdout.fileno(),False);selector.register(child.stdout,selectors.EVENT_READ)
     pending=b''
     try:
@@ -133,6 +134,6 @@ def serve(cfg):
                 while b'\n' in pending:
                     name,pending=pending.split(b'\n',1)
                     if IMAGE.fullmatch(name.decode('utf-8',errors='replace')):changed=True
-            viewer.refresh(changed)
+            viewer.refresh(changed);pages.refresh()
     finally:
         viewer.close();selector.close();child.terminate();child.wait(timeout=2)

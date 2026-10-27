@@ -28,15 +28,15 @@ def validate_png(data):
         offset=end
     raise ValueError('missing IEND')
 
-def frame(identifier,data):
+def frame(identifier,data,magic=MAGIC):
     if not re.fullmatch('[a-f0-9]{32}',identifier) or not 0<len(data)<=LIMIT:raise ValueError('invalid frame')
     digest=hashlib.sha256(data).hexdigest()
     header={'id':identifier,'sha256':digest,'size':len(data)}
-    return MAGIC+json.dumps(header,separators=(',',':')).encode()+b'\n'+data,header
+    return magic+json.dumps(header,separators=(',',':')).encode()+b'\n'+data,header
 
-def parse(stream,first=None):
+def parse(stream,first=None,*,magic=MAGIC,validator=validate_png):
     if first is None:first=stream.read(4)
-    if first!=MAGIC:
+    if first!=magic:
         data=first+stream.read(LIMIT+1)
         if len(data)>LIMIT:raise ValueError('legacy PNG too large')
         validate_png(data)
@@ -53,7 +53,7 @@ def parse(stream,first=None):
     data=stream.read(size)
     if len(data)!=size or stream.read(1):raise ValueError('body size mismatch')
     if hashlib.sha256(data).hexdigest()!=header['sha256']:raise ValueError('body hash mismatch')
-    validate_png(data)
+    validator(data)
     return header,data
 
 def verify_ack(data,header):

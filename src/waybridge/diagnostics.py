@@ -11,7 +11,7 @@ def server_health(cfg):
     r=subprocess.run(['systemctl','--user','is-active','bridge-shot-view.service'],capture_output=True,text=True,timeout=2,env=env)
     try:viewer=json.loads((cfg.state/'gallery-status.json').read_text())
     except (OSError,ValueError):viewer=None
-    return {'ok':True,'protocol':'WB1','gallery_service':r.stdout.strip()=='active','viewer':viewer}
+    return {'ok':True,'protocol':'WB1','page_export':1,'gallery_service':r.stdout.strip()=='active','viewer':viewer}
 
 def check(cfg):
     failed=False

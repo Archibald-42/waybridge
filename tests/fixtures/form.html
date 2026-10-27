@@ -1,0 +1,23 @@
+<!doctype html><html lang="ru"><meta charset="utf-8"><title>Fixture — ordered form export</title>
+<style>body{font:18px sans-serif;margin:24px;background:#fff;color:#13213b}fieldset{margin:20px 0;padding:20px}label{display:block;margin:12px 0}.spacer{height:4600px;background:linear-gradient(#f4f7ff,#dce7ff)}img{width:60px;height:60px}</style>
+<h1>Тестовая форма</h1><p>Порядок вопросов и вариантов задан специально.</p>
+<form>
+<fieldset><legend>Вопрос B раньше вопроса A</legend>
+<label><input type="radio" name="q1" value="three">Третий вариант</label>
+<label><input type="radio" name="q1" value="one" checked>Первый вариант</label>
+<label><input type="radio" name="q1" value="two">Второй вариант</label>
+<label>Ответ текстом<input id="text-answer" type="text" value="original attribute"></label>
+</fieldset>
+<fieldset><legend>Вопрос A</legend>
+<label><input type="checkbox" checked>Выбрано</label><label><input type="checkbox">Не выбрано</label>
+<label>Список<select><option>Gamma</option><option selected>Alpha</option><option>Beta</option></select></label>
+</fieldset>
+<input type="hidden" value="hidden-token-must-not-be-exported">
+<input type="password" value="password-must-not-be-exported" aria-label="Password">
+<div hidden>Hidden question must not be exported</div>
+</form>
+<div class="spacer">Начало длинной страницы</div>
+<p>КОНЕЦ ТЕКУЩЕГО РАЗДЕЛА</p>
+<img alt="Изображение внизу" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYGAAAAAEAAH2FzhVAAAAAElFTkSuQmCC">
+<script>document.getElementById('text-answer').value='current edited value';</script>
+</html>

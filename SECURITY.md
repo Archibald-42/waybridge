@@ -1,6 +1,6 @@
 # Security
 
-Waybridge 3.5 transports screenshots and files over authenticated Tailscale/SSH.
+Waybridge transports screenshots, files and optional page snapshots over authenticated Tailscale/SSH.
 It has no keyboard interception, synthetic input, answer overlay or clock replacement.
 The Waybar battery indicator reports transport readiness; it does not acknowledge
 individual screenshot deliveries.
@@ -20,3 +20,19 @@ local integrity, not author identity. Keep reports minimal and sanitized.
 Uninstall preserves project documents and archives incoming files and screenshots
 outside the removed runtime. It removes dedicated transport keys; fresh pairing
 is required after a clean reinstall. General-purpose system packages are retained.
+
+
+Page export is explicitly user-triggered. Firefox grants optional capture access;
+a native messaging manifest authorizes only the fixed add-on ID. No HTTP listener,
+cookie API or extra inbound port is used in production. Page packets have bounded
+size, validated PNG tiles and complete geometry. The reader uses escaped text,
+embedded PNG and a restrictive CSP instead of executing source markup/scripts.
+The paired SSH key is authorized to publish both images and page snapshots.
+
+Only the current available document is exported, including its visible content
+and current entered values. Private tabs are rejected. Query/fragment, cookies,
+localStorage and HTTP headers are not collected. Pending snapshots remain in
+extension RAM for retry; stopping the transport does not clear that browser RAM.
+Snapshots on the receiving PC are retained locally (last ten) and preserved on
+uninstall. Removing the native application does not uninstall a separately signed
+Firefox add-on; remove it through Firefox's Add-ons Manager when appropriate.

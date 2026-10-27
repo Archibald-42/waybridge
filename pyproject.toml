@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "waybridge"
-version = "3.5.3"
+version = "3.6.0rc1"
 description = "Explicitly controlled Wayland file and screenshot bridge over Tailscale"
 requires-python = ">=3.11"
 license = "MIT"
@@ -16,3 +16,6 @@ waybridge = "waybridge.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+waybridge = ["browser/firefox/*"]

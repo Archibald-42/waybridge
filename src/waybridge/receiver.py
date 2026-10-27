@@ -17,6 +17,10 @@ def receive(cfg,stream=None):
             if source.read(2)!=b'\n':raise ValueError('invalid health request')
             from .diagnostics import server_health
             print(json.dumps(server_health(cfg)),flush=True);return
+        from .pages import MAGIC as PAGE_MAGIC,receive as receive_page
+        if first==PAGE_MAGIC:
+            signal.alarm(60)  # Sender allows 45 seconds plus receiver validation/fsync.
+            return receive_page(cfg,source,first)
         return _receive(cfg,source,first)
     finally:signal.alarm(0)
 

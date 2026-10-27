@@ -53,7 +53,7 @@ def run(cfg,yes=False,authorizer='sudo'):
     except (OSError,RuntimeError,subprocess.SubprocessError):pass
     subprocess.run(['systemctl','--user','stop',*[name+'.service' for name in USER_UNITS]],capture_output=True,timeout=15)
     preserved=home/'.local/state/waybridge-preserved'/str(time.time_ns())
-    for source,name in ((cfg.inbox,'inbox'),(cfg.state/'shots','shots'),(cfg.state/'versions','versions')):
+    for source,name in ((cfg.inbox,'inbox'),(cfg.state/'shots','shots'),(cfg.state/'versions','versions'),(cfg.state/'pages','pages')):
         if source.exists() and any(source.iterdir()):
             preserved.mkdir(parents=True,exist_ok=True)
             shutil.copytree(source,preserved/name,symlinks=True)
@@ -78,6 +78,9 @@ def run(cfg,yes=False,authorizer='sudo'):
         write(bar,json.dumps(data,ensure_ascii=False,indent=2)+'\n')
     reload_panel()
     for name in USER_UNITS:(home/'.config/systemd/user'/(name+'.service')).unlink(missing_ok=True)
+    from .pages import HOST_NAME
+    for folder in (home/'.mozilla/native-messaging-hosts',home/'.config/mozilla/native-messaging-hosts'):(folder/(HOST_NAME+'.json')).unlink(missing_ok=True)
+    (home/'.local/libexec/waybridge-page-native').unlink(missing_ok=True)
     for name in WRAPPERS:(home/'.local/bin'/name).unlink(missing_ok=True)
     ssh=home/'.ssh';config=ssh/'config'
     if config.exists():write(config,'\n'.join(line for line in config.read_text().splitlines() if line.strip()!='Include ~/.ssh/bridge.conf')+'\n')

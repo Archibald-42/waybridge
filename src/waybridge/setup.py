@@ -126,7 +126,7 @@ def wizard(args):
     if old:print(f'Сейчас: {old.role} · peer {old.peer_ip}. Можно заменить peer или выбрать другую роль.')
     role=args.role or ('client','server')[choose('Роль этого компьютера:',['Клиент — получает файлы, отправляет снимки','Сервер (ПК) — показывает снимки, отправляет файлы'],0 if not old or old.role=='client' else 1)]
     if not args.skip_packages:
-        packages=['python','tailscale','openssh','nftables','inotify-tools']+(['acl','grim','waybar'] if role=='client' else ['imv'])
+        packages=['python','tailscale','openssh','nftables','inotify-tools']+(['acl','grim','waybar'] if role=='client' else ['imv','xdg-utils'])
         print('\nУстановка зависимостей через pacman. sudo нужен только для системной настройки.')
         run(['sudo','pacman','-S','--needed','--noconfirm',*packages])
     if not shutil.which('tailscale'):raise RuntimeError('установите tailscale и повторите setup')

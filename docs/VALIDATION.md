@@ -54,3 +54,31 @@ Two source archives built from unchanged files must be byte-identical. The CI
 extracts the archive and checks every SHA-256 manifest entry. The archive contains
 only an explicit source/documentation/test allowlist. Pairing profiles, private
 keys, deployment configuration, screenshots and incoming documents are excluded.
+
+
+# Page export · 3.6.0rc1
+
+The full Python suite now contains **68 tests**. Added coverage includes document
+schema/geometry bounds, complete visual tile coverage, PNG validation, ordered
+choices and current field values, HTML escaping/CSP, source-script exclusion,
+per-snapshot ACK/deduplication/collision checks, ten-document retention, native
+message framing and stop during an in-flight page transfer. Page-viewer tests
+cover duplicate-open prevention, a failed opener and malformed metadata without
+crashing the screenshot supervisor.
+
+Browser tests cover a rendered fixture with deliberately reordered choices,
+current values different from HTML attributes, offscreen content, hidden/password
+exclusions, retry with the same ID, capture-time mutation rejection and explicit
+confirmation of incomplete exports. They use Chromium for DOM/orchestration and
+an isolated real Firefox extension for the actual `tabs.captureTab` API.
+
+On the installed Firefox 158, a 5379-CSS-pixel-tall fixture was captured in two PNG
+tiles without scrolling. A second integration run used Firefox native messaging
+and the existing pinned SSH endpoint to store JSON/HTML on the paired PC, verified
+the matching ACK, and triggered its user-session page opener. Both devices run the
+candidate through `setup.sh --update`; existing screenshot/SFTP diagnostics pass.
+
+The user's actual Google Forms and its particular question types have not yet
+been validated. The extension is unsigned and needs temporary loading for this
+preview; a permanent Firefox installation requires the owner's Mozilla signing
+workflow. No signing setting in the user's existing profile was changed.

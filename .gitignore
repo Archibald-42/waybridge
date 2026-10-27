@@ -15,3 +15,5 @@ system-plan.sh
 *.tar.gz
 
 *.wbpair
+
+*.xpi
