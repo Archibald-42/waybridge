@@ -13,6 +13,16 @@ def backup(path):
 
 def write(path,text):backup(path);atomic(path,text.encode())
 
+def reload_panel():
+    """Reload only this user's main Waybar, preserving unrelated panels."""
+    import os,signal
+    for proc in Path('/proc').glob('[0-9]*'):
+        try:
+            if proc.stat().st_uid!=os.getuid():continue
+            args=(proc/'cmdline').read_bytes().split(b'\0')
+            if args[0] in (b'waybar',b'/usr/bin/waybar') and b'-c' not in args:os.kill(int(proc.name),signal.SIGUSR2)
+        except (OSError,IndexError):pass
+
 def jsonc(text):
     # Preserve URL/comment markers inside strings; support JSONC trailing commas.
     out=[];i=0;quoted=False;escaped=False
@@ -70,14 +80,15 @@ def wire(cfg,config):
                     if field not in bar:continue
                     names=bar[field]
                     if not isinstance(names,list) or not all(isinstance(x,str) for x in names):raise ValueError('module list required')
-                    if cfg.role=='client':bar[field]=[{'clock':'custom/bridge-clock','battery':'custom/battery'}.get(x,x) for x in names]
-                    else:bar[field]=[{'custom/bridge-clock':'clock','custom/battery':'battery'}.get(x,x) for x in names]
+                    bar[field]=[{'custom/bridge-clock':'clock'}.get(x,x) for x in names]
+                    if cfg.role=='client':bar[field]=['custom/battery' if x=='battery' else x for x in bar[field]]
+                    else:bar[field]=['battery' if x=='custom/battery' else x for x in bar[field]]
+                bar.pop('custom/bridge-clock',None)
+                bar.setdefault('clock',{'format':'{:%H:%M}'})
                 if cfg.role=='client':
-                    bar['custom/bridge-clock']={'exec':command(config,'clock serve'),'return-type':'json','restart-interval':2,'escape':True}
                     bar['custom/battery']={'exec':command(config,'battery'),'return-type':'json','restart-interval':3}
                 else:
-                    bar.pop('custom/bridge-clock',None);bar.pop('custom/battery',None)
-                    bar.setdefault('clock',{'format':'{:%H:%M}'})
+                    bar.pop('custom/battery',None)
                     bar.setdefault('battery',{'format':'{capacity}%'})
             write(waybar,json.dumps(data,ensure_ascii=False,indent=2)+'\n')
             print('Waybar: модули настроены; прежний конфиг сохранён в backups.')

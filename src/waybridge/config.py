@@ -16,13 +16,9 @@ class Config:
     inbox: Path
     projects: Path
     state: Path
-    keyboard: Path
     queue_count: int = 8
     queue_bytes: int = 67108864
     png_limit: int = 33554432
-    api_timeout: float = .3
-    loop_limit: float = .75
-    hold_ms: int = 0
     @property
     def runtime(self):
         path = os.environ.get('XDG_RUNTIME_DIR')
@@ -55,12 +51,8 @@ def load(path=None):
     c=Config(data['role'],data['peer_ip'],data['own_ip'],data['user'],data['helper_user'],
              path_value('inbox','/srv/bridge/inbox'),path_value('projects',home/'Documents/projects'),
              path_value('state',home/'.cache/bridge'),
-             path_value('keyboard','/dev/input/by-path/platform-i8042-serio-0-event-kbd'),
-             **{k:data[k] for k in ('queue_count','queue_bytes','png_limit','api_timeout','loop_limit','hold_ms') if k in data})
-    if any(type(getattr(c,k)) is not int for k in ('queue_count','queue_bytes','png_limit','hold_ms')):raise ValueError('integer limits required')
-    if any(type(getattr(c,k)) not in (int,float) for k in ('api_timeout','loop_limit')):raise ValueError('numeric timeouts required')
+             **{k:data[k] for k in ('queue_count','queue_bytes','png_limit') if k in data})
+    if any(type(getattr(c,k)) is not int for k in ('queue_count','queue_bytes','png_limit')):raise ValueError('integer limits required')
     if not (1<=c.queue_count<=16 and 1048576<=c.queue_bytes<=268435456 and 1048576<=c.png_limit<=33554432):
         raise ValueError('invalid RAM/queue limits')
-    if not (.05<=c.api_timeout<=.5 and .25<=c.loop_limit<=2 and c.hold_ms in (0,400,800)):
-        raise ValueError('invalid watchdog/hold settings')
     return c

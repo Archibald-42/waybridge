@@ -15,7 +15,6 @@ import zlib
 from waybridge.config import Config,load
 from waybridge.protocol import frame,parse,verify_ack,validate_png,MAGIC
 from waybridge.receiver import receive
-from waybridge.keyboard import Cursor,snapshot
 from waybridge.screenshots import Budget
 from waybridge.files import publish
 from waybridge.install import bindings
@@ -23,7 +22,7 @@ from waybridge.install import bindings
 def chunk(kind,data):return struct.pack('>I',len(data))+kind+data+struct.pack('>I',zlib.crc32(kind+data)&0xffffffff)
 def png():return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',1,1,8,2,0,0,0))+chunk(b'IDAT',zlib.compress(b'\0\0\0\0'))+chunk(b'IEND',b'')
 def cfg(root):
-    return Config('client','100.64.0.1','100.64.0.2','archi','archi',root/'inbox',root/'projects',root/'state',root/'kbd')
+    return Config('client','100.64.0.1','100.64.0.2','archi','archi',root/'inbox',root/'projects',root/'state')
 
 class ProtocolTests(unittest.TestCase):
     def test_verified_roundtrip_and_legacy(self):
@@ -53,32 +52,13 @@ class ProtocolTests(unittest.TestCase):
             bad,_=frame('a'*32,data)
             with self.assertRaises(ValueError):receive(c,io.BytesIO(bad))
 
-class InputTests(unittest.TestCase):
-    def test_enter_is_explicit_and_backspace_rolls_back(self):
-        c=Cursor('A\nB')
-        self.assertEqual(c.press(28),(None,None))
-        self.assertEqual(c.press(30),('character','A'))
-        self.assertEqual(c.press(30),(None,None))
-        self.assertEqual(c.press(28),('character','\n'))
-        self.assertEqual(c.press(30),('character','B'))
-        self.assertEqual(c.press(30),(None,None))
-        self.assertEqual(c.press(14),('backspace',None))
-        self.assertEqual(c.press(30),('character','B'))
-    def test_snapshot_rejects_external_target_and_unicode(self):
-        with tempfile.TemporaryDirectory() as td:
-            c=cfg(Path(td));c.state.mkdir();c.projects.mkdir();outside=Path(td)/'outside.py';outside.write_text('X')
-            (c.state/'latest-code').write_text(str(outside))
-            with self.assertRaises(ValueError):snapshot(c)
-            inside=c.projects/'main.py';inside.write_text('привет')
-            (c.state/'latest-code').write_text(str(inside))
-            with self.assertRaises(ValueError):snapshot(c)
-    def test_pad_layout_and_hold_release(self):
+class ControlsTests(unittest.TestCase):
+    def test_only_transport_hotkeys_remain(self):
         text=bindings(Path('/home/test/config.toml'))
-        self.assertEqual(text.count('hl.bind('),6)
-        self.assertIn('code:81',text)
-        self.assertNotIn('SUPER',text)
-        hold=bindings(Path('/home/test/config.toml'),800)
-        self.assertEqual(hold.count('release = true'),5)
+        self.assertEqual(text.count('hl.bind('),3)
+        for code in (79,80,81):self.assertIn('code:'+str(code),text)
+        for removed in ('code:83','code:84','code:85','ydotool','keyboard'):
+            self.assertNotIn(removed,text)
 
 class StorageTests(unittest.TestCase):
     def test_cli_error_returns_nonzero(self):
@@ -98,9 +78,9 @@ class StorageTests(unittest.TestCase):
             source.write_text('two');self.assertTrue(publish(c,'main.py'))
             self.assertEqual((c.projects/'main.py').read_text(),'two')
             self.assertEqual(len(list((c.state/'versions').iterdir())),1)
-            self.assertEqual((c.state/'latest-code').read_text(),str(c.projects/'main.py'))
+            self.assertFalse((c.state/'latest-code').exists())
             (c.inbox/'bad.py').symlink_to(source);self.assertFalse(publish(c,'bad.py'))
-            self.assertFalse(publish(c,'../main.py'));self.assertFalse(publish(c,'clock.txt'))
+            self.assertFalse(publish(c,'../main.py'));self.assertFalse(publish(c,'missing.txt'))
     def test_config_validation(self):
         with tempfile.TemporaryDirectory() as td:
             p=Path(td)/'config.toml';p.write_text('role="client"\nown_ip="100.64.0.2"\npeer_ip="8.8.8.8"\nuser="archi"\nhelper_user="archi"\n')

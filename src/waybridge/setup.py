@@ -11,7 +11,7 @@ import tomllib
 from .config import default_path,load
 from .runtime import atomic
 from .pairing import export,read,fingerprint,configuration
-from .integration import backup,wire,shell_path
+from .integration import backup,wire,shell_path,reload_panel
 
 def run(args,timeout=None,check=True):return subprocess.run(args,check=check,timeout=timeout)
 def choose(title,items,default=0):
@@ -22,22 +22,6 @@ def choose(title,items,default=0):
         if not reply:return default
         if reply.isdigit() and 1<=int(reply)<=len(items):return int(reply)-1
         print('Выберите номер из списка.')
-
-def keyboard(previous=None):
-    candidates=[];seen=set()
-    paths=list(Path('/dev/input/by-path').glob('*-event-kbd'))+list(Path('/dev/input/by-id').glob('*-event-kbd'))
-    if previous and Path(previous).exists():paths.insert(0,Path(previous))
-    for path in paths:
-        resolved=path.resolve()
-        if resolved in seen:continue
-        seen.add(resolved)
-        name=Path('/sys/class/input')/resolved.name/'device/name'
-        try:label=name.read_text().strip()
-        except OSError:label=path.name
-        candidates.append((path,label))
-    if not candidates:raise RuntimeError('клавиатура не найдена; подключите её и повторите setup')
-    pick=choose('Клавиатура для ручного ввода (не USB Numpad управления):',[label+' — '+str(path) for path,label in candidates])
-    return str(candidates[pick][0])
 
 def peers():
     data=json.loads(subprocess.check_output(['tailscale','status','--json'],text=True,timeout=5))
@@ -77,20 +61,19 @@ def receive_profile(role,folder,own_ip=None):
                 return path,value
             except (OSError,ValueError) as e:print('Профиль не принят:',e)
 
-def apply(own,peer,config,old,selected_keyboard,skip_root=False,integrate=True,start=True):
+def apply(own,peer,config,old,skip_root=False,integrate=True,start=True):
     from .install import root_plan,user_install,link
     from .control import execute
     previous=tomllib.loads(config.read_text()) if config.exists() else {}
     if skip_root and old and (old.role!=own['role'] or old.peer_ip!=peer['ip']):
         raise ValueError('--skip-root cannot change role or peer; update the system restriction too')
     if not skip_root:run(['sudo','-v'])
-    # First stop keyboard/user processes while they still refer to the old config.
+    # Stop workers before replacing their configuration.
     if old:
         try:execute(old,'stop')
         except (OSError,RuntimeError,subprocess.SubprocessError):
             run(['systemctl','--user','stop','bridge-key-code.service','bridge-shot-queue.service','bridge-files.service','bridge-note.service','bridge-shot-view.service'],check=False)
     data=configuration(own,peer,previous)
-    if selected_keyboard:data['keyboard']=selected_keyboard
     payload=('\n'.join(k+' = '+json.dumps(v) for k,v in data.items())+'\n').encode()
     config.parent.mkdir(parents=True,exist_ok=True)
     import tempfile
@@ -108,15 +91,9 @@ def apply(own,peer,config,old,selected_keyboard,skip_root=False,integrate=True,s
     if integrate:wire(cfg,config)
     run(['systemctl','--user','import-environment','WAYLAND_DISPLAY','HYPRLAND_INSTANCE_SIGNATURE','XDG_CURRENT_DESKTOP'],check=False)
     if shutil.which('hyprctl'):run(['hyprctl','reload'],check=False)
-    # Reload the main panel only; do not interfere with the separate text panel.
-    import signal
-    for proc in Path('/proc').glob('[0-9]*'):
-        try:
-            args=(proc/'cmdline').read_bytes().split(b'\0')
-            if args[0] in (b'waybar',b'/usr/bin/waybar') and b'-c' not in args:os.kill(int(proc.name),signal.SIGUSR2)
-        except (OSError,IndexError):pass
+    reload_panel()
     if start and not skip_root:execute(cfg,'start')
-    print('\n'+('Настройка завершена. Ввод OFF.' if not skip_root else 'User files installed; system plan NOT applied. Services remain stopped.'))
+    print('\n'+('Настройка завершена. Доступны снимки и файлы.' if not skip_root else 'User files installed; system plan NOT applied. Services remain stopped.'))
     print('Запуск / остановка в новом терминале: waybridge start / waybridge stop')
     print('Проверка соединения: waybridge check')
     return cfg
@@ -129,7 +106,7 @@ def wizard(args):
     if old:print(f'Сейчас: {old.role} · peer {old.peer_ip}. Можно заменить peer или выбрать другую роль.')
     role=args.role or ('client','helper')[choose('Роль этого компьютера:',['Клиент — получает файлы, отправляет снимки','Помощник — показывает снимки, отправляет файлы'],0 if not old or old.role=='client' else 1)]
     if not args.skip_packages:
-        packages=['python','tailscale','openssh','nftables','inotify-tools']+(['acl','ydotool','grim','waybar'] if role=='client' else ['imv'])
+        packages=['python','tailscale','openssh','nftables','inotify-tools']+(['acl','grim','waybar'] if role=='client' else ['imv'])
         print('\nУстановка зависимостей через pacman. sudo нужен только для системной настройки.')
         run(['sudo','pacman','-S','--needed','--noconfirm',*packages])
     if not shutil.which('tailscale'):raise RuntimeError('установите tailscale и повторите setup')
@@ -158,6 +135,5 @@ def wizard(args):
     print(f'\nВторой ПК: {peer["hostname"]} · {peer["ip"]} · {peer["user"]} · {peer["role"]}')
     print('Код сверки профиля:',fingerprint(peer))
     if not args.yes:input('Сверьте код с экраном второго ПК; Enter продолжает настройку, Ctrl+C отменяет: ')
-    selected=(args.keyboard or (str(old.keyboard) if args.yes and old and old.keyboard.exists() else keyboard(str(old.keyboard) if old else None))) if role=='client' else (str(old.keyboard) if old else None)
-    apply(own,peer,config,old,selected,args.skip_root,not args.no_integrate,not args.no_start)
+    apply(own,peer,config,old,args.skip_root,not args.no_integrate,not args.no_start)
     return 0

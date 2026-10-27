@@ -14,7 +14,7 @@ def initialize(args):
     own=subprocess.check_output(['tailscale','ip','-4'],text=True,timeout=3).strip()
     user=pwd.getpwuid(os.getuid()).pw_name
     data={'role':args.role,'own_ip':own,'peer_ip':args.peer_ip,'user':user,
-          'helper_user':args.helper_user or user,'hold_ms':0}
+          'helper_user':args.helper_user or user}
     path=Path(args.config or default_path())
     if path.exists():raise RuntimeError('configuration already exists; edit it explicitly')
     atomic(path,('\n'.join(k+' = '+json.dumps(v) for k,v in data.items())+'\n').encode())
@@ -27,31 +27,18 @@ def initialize(args):
     print('Share ONLY public key:',str(key)+'.pub')
 
 def trigger(cfg,action,phase):
-    # Compositor press/release bindings, matching physical pad behavior under grab.
-    stamp=cfg.runtime/('waybridge-hold-'+action)
-    if phase=='down' and cfg.hold_ms and action!='kill':
-        atomic(stamp,str(time.monotonic()).encode());return
-    if phase=='up':
-        try:elapsed=time.monotonic()-float(stamp.read_text())
-        except (OSError,ValueError):return
-        stamp.unlink(missing_ok=True)
-        if elapsed<cfg.hold_ms/1000:return
+    if phase!='down':return
     if action in {'start','kill'}:
         subprocess.run(['systemctl','--user','start','--no-block',
                         'bridge-start.service' if action=='start' else 'bridge-kill.service'],check=True,timeout=2)
     elif action=='shot':print(json.dumps(rpc(cfg.runtime/'bridge-shot-queue.sock','shot')))
-    elif action=='input':print(json.dumps(rpc(cfg.runtime/'bridge-key-code.sock','toggle')))
-    else:
-        from .display import clock_control
-        clock_control(cfg,'reset' if action=='reset' else 'toggle')
 
 def doctor(cfg):
     import shutil
     commands=['tailscale','ssh','sftp','systemctl','inotifywait']
-    commands+=['hyprctl','grim','ydotool'] if cfg.role=='client' else ['imv-wayland','imv-msg']
+    commands+=['hyprctl','grim'] if cfg.role=='client' else ['imv-wayland','imv-msg']
     results={x:bool(shutil.which(x)) for x in commands}
     if cfg.role=='client':
-        results['keyboard-readable']=os.access(cfg.keyboard,os.R_OK)
         results['inbox-readable']=os.access(cfg.inbox,os.R_OK)
     results['runtime-directory']=bool(os.environ.get('XDG_RUNTIME_DIR'))
     print(json.dumps(results,ensure_ascii=False,indent=2))
@@ -63,7 +50,8 @@ def main():
     sub=p.add_subparsers(dest='command',required=True)
     init=sub.add_parser('init');init.add_argument('--role',choices=['client','helper'],required=True);init.add_argument('--peer-ip',required=True);init.add_argument('--helper-user')
     sub.add_parser('doctor');sub.add_parser('install-user');sub.add_parser('check')
-    setup=sub.add_parser('setup');setup.add_argument('--role',choices=['client','helper']);setup.add_argument('--peer-profile');setup.add_argument('--keyboard');setup.add_argument('--yes',action='store_true')
+    uninstall=sub.add_parser('uninstall');uninstall.add_argument('--yes',action='store_true');uninstall.add_argument('--authorizer',choices=['sudo','pkexec'],default='sudo')
+    setup=sub.add_parser('setup');setup.add_argument('--role',choices=['client','helper']);setup.add_argument('--peer-profile');setup.add_argument('--yes',action='store_true')
     for flag in ('skip-packages','skip-root','no-start','no-integrate'):setup.add_argument('--'+flag,action='store_true')
     pair=sub.add_parser('pair');ps=pair.add_subparsers(dest='pair_action',required=True)
     exp=ps.add_parser('export');exp.add_argument('--role',choices=['client','helper']);exp.add_argument('--output')
@@ -72,13 +60,12 @@ def main():
     sub.add_parser('helper-start')
     link=sub.add_parser('link');link.add_argument('--peer-host-key',required=True)
     root=sub.add_parser('root-plan');root.add_argument('--peer-key',required=True);root.add_argument('--output',required=True)
-    for name,choices in [('control',['start','stop','status','reset']),('input',['serve','toggle','stop','status']),('shot',['serve','request','status']),('clock',['serve','reset','toggle'])]:
+    for name,choices in [('control',['start','stop','status']),('shot',['serve','request','status'])]:
         sp=sub.add_parser(name);sp.add_argument('action',choices=choices)
-    for name in ('files','receive','gallery','notes','release','session-start'):sub.add_parser(name)
+    for name in ('files','receive','gallery','session-start'):sub.add_parser(name)
     battery=sub.add_parser('battery');battery.add_argument('--once',action='store_true')
     send=sub.add_parser('send-code');send.add_argument('file');send.add_argument('--name')
-    ans=sub.add_parser('send-answer');ans.add_argument('number',type=int);ans.add_argument('answer',type=int)
-    tr=sub.add_parser('trigger');tr.add_argument('action',choices=['start','shot','kill','input','reset','clock']);tr.add_argument('phase',choices=['down','up'],default='down',nargs='?')
+    tr=sub.add_parser('trigger');tr.add_argument('action',choices=['start','shot','kill']);tr.add_argument('phase',choices=['down','up'],default='down',nargs='?')
     args=p.parse_args()
     try:
         if args.command=='init':initialize(args);return 0
@@ -93,9 +80,12 @@ def main():
             return 0
         cfg=load(args.config)
         c=args.command
-        if cfg.role=='helper' and c in {'input','shot','clock','files','notes','battery','release','session-start','trigger'}:
+        if c=='uninstall':
+            from .uninstall import run
+            run(cfg,args.yes,args.authorizer);return 0
+        if cfg.role=='helper' and c in {'shot','files','battery','session-start','trigger'}:
             raise ValueError('this command requires role client')
-        if cfg.role=='client' and c in {'receive','gallery','send-code','send-answer'}:
+        if cfg.role=='client' and c in {'receive','gallery','send-code'}:
             raise ValueError('this command requires role helper')
         if c=='doctor':return doctor(cfg)
         if c=='check':
@@ -123,15 +113,11 @@ def main():
         elif c=='control':
             from .control import execute
             print(json.dumps(execute(cfg,args.action),ensure_ascii=False,indent=2))
-        elif c in {'input','shot'}:
+        elif c=='shot':
             if args.action=='serve':
-                if c=='input':from .keyboard import serve
-                else:from .screenshots import serve
+                from .screenshots import serve
                 serve(cfg)
-            else:print(json.dumps(rpc(cfg.runtime/('bridge-key-code.sock' if c=='input' else 'bridge-shot-queue.sock'),'shot' if args.action=='request' else args.action)))
-        elif c=='clock':
-            from .display import clock,clock_control
-            clock(cfg) if args.action=='serve' else clock_control(cfg,args.action)
+            else:print(json.dumps(rpc(cfg.runtime/'bridge-shot-queue.sock','shot' if args.action=='request' else args.action)))
         elif c in {'files','gallery'}:
             if c=='files':from .files import serve
             else:from .gallery import serve
@@ -139,18 +125,12 @@ def main():
         elif c=='receive':
             from .receiver import receive
             receive(cfg)
-        elif c=='notes':
-            from .display import notes
-            notes(cfg)
         elif c=='battery':
             from .display import battery
             battery(cfg,args.once)
-        elif c in {'send-code','send-answer'}:
-            from .files import push,answer
-            push(cfg,args.file,args.name) if c=='send-code' else answer(cfg,args.number,args.answer)
-        elif c=='release':
-            from .inject import Emitter
-            Emitter().release()
+        elif c=='send-code':
+            from .files import push
+            push(cfg,args.file,args.name)
         elif c=='trigger':trigger(cfg,args.action,args.phase)
         elif c=='session-start':
             subprocess.run(['systemctl','--user','import-environment','WAYLAND_DISPLAY','HYPRLAND_INSTANCE_SIGNATURE','XDG_CURRENT_DESKTOP'],check=True,timeout=3)

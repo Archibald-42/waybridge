@@ -1,12 +1,12 @@
-"""Scoped systemd control, bounded deadlines, no keyboard rearming on recovery."""
+"""Scoped lifecycle for screenshot and file transport only."""
 import fcntl
 import json
 import subprocess
 import time
 from .runtime import rpc
 
-USER_UNITS=['bridge-key-code.service','bridge-shot-queue.service','bridge-files.service','bridge-note.service']
-ROOT_UNITS=['bridge-inbox.service','ydotool-bridge.service']
+USER_UNITS=['bridge-shot-queue.service','bridge-files.service']
+ROOT_UNITS=['bridge-inbox.service']
 
 def run(cmd,timeout=12,check=True):
     return subprocess.run(cmd,timeout=timeout,check=check,capture_output=True,text=True)
@@ -27,12 +27,8 @@ def units(cfg):
     return (USER_UNITS,ROOT_UNITS) if cfg.role=='client' else (['bridge-shot-view.service'],['bridge-shot.service'])
 
 def stop(cfg):
-    from .display import clock_control
     cfg.stopped.touch();errors=[]
     user_units,root_units=units(cfg)
-    try:
-        if cfg.role=='client':rpc(cfg.runtime/'bridge-key-code.sock','stop')
-    except Exception:pass
     try:
         r=run(['systemctl','--user','stop',*user_units],check=False)
         if r.returncode:errors.append('user units could not stop')
@@ -42,21 +38,17 @@ def stop(cfg):
     for unit in root_units:
         try:root_unit('stop',unit)
         except Exception as e:errors.append(str(e))
-    if cfg.role=='client':clock_control(cfg,'reset')
     if errors:raise RuntimeError('; '.join(errors))
 
 def start(cfg):
-    from .display import clock_control
     cfg.stopped.touch()
     user_units,root_units=units(cfg)
     try:
-        if cfg.role=='client':clock_control(cfg,'reset')
         if run(['systemctl','is-active','bridge-filter.service'],check=False).stdout.strip()!='active':
             raise RuntimeError('bridge-filter.service is not active; refusing to open transport')
         for unit in reversed(root_units):root_unit('start',unit)
         run(['systemctl','--user','reset-failed',*user_units],check=False)
         run(['systemctl','--user','start',*user_units])
-        if cfg.role=='client':rpc(cfg.runtime/'bridge-key-code.sock','stop')
         cfg.stopped.unlink(missing_ok=True)
     except Exception:
         try:stop(cfg)
@@ -68,7 +60,7 @@ def status(cfg):
     data={'role':cfg.role,'stopped':cfg.stopped.exists()}
     for name,prefix,unit_names in [(cfg.role,['systemctl','--user'],user_units),('transport',['systemctl'],root_units)]:
         data[name]=dict(zip(unit_names,run(prefix+['is-active',*unit_names],check=False).stdout.splitlines()))
-    for name,endpoint in ([('input','bridge-key-code.sock'),('queue','bridge-shot-queue.sock')] if cfg.role=='client' else []):
+    for name,endpoint in ([('queue','bridge-shot-queue.sock')] if cfg.role=='client' else []):
         try:data[name]=rpc(cfg.runtime/endpoint,'status')
         except Exception:data[name]={'ok':False}
     return data
@@ -80,8 +72,5 @@ def execute(cfg,action):
         if action=='start':start(cfg)
         elif action=='stop':stop(cfg)
         elif action=='status':return status(cfg)
-        elif action=='reset':
-            from .display import clock_control
-            if cfg.role=='client':clock_control(cfg,'reset')
         else:raise ValueError('invalid control action')
     return {'ok':True,'action':action}

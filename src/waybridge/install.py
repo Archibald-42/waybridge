@@ -33,18 +33,59 @@ MemoryMax=384M
 LimitCORE=0
 '''+('WatchdogSec=4\nWatchdogSignal=SIGKILL\nNotifyAccess=main\n' if watchdog else '')
 
-def bindings(config,hold=0):
+def bindings(config):
     lines=['-- Waybridge: physical Numpad keycodes; NumLock-independent.']
-    for code,action in [(79,'start'),(80,'shot'),(81,'kill'),(83,'input'),(84,'reset'),(85,'clock')]:
+    for code,action in [(79,'start'),(80,'shot'),(81,'kill')]:
         down=command(config,'trigger '+action+' down')
         lines.append('hl.bind('+json.dumps(' + code:'+str(code))+', hl.dsp.exec_cmd('+json.dumps(down)+'))')
-        if hold and action!='kill':
-            up=command(config,'trigger '+action+' up')
-            lines.append('hl.bind('+json.dumps(' + code:'+str(code))+', hl.dsp.exec_cmd('+json.dumps(up)+'), { release = true })')
     lines+=['hl.permission("/usr/bin/grim", "screencopy", "allow")',
-            'hl.device({ name = "ydotoold-virtual-device", kb_layout = "us", kb_options = "" })',
             'hl.on("hyprland.start", function() hl.exec_cmd('+json.dumps(command(config,'session-start'))+') end)']
     return '\n'.join(lines)+'\n'
+
+def legacy_root_cleanup(uid):
+    """Remove only the old Waybridge input capability, retaining transport."""
+    return '''systemctl stop ydotool-bridge.service 2>/dev/null || true
+systemctl disable ydotool-bridge.service 2>/dev/null || true
+python - <<'WAYBRIDGE_CLEANUP'
+from pathlib import Path
+import glob,re,subprocess
+rule=Path('/etc/udev/rules.d/90-bridge-key-code.rules')
+if rule.exists():
+    text=rule.read_text()
+    scope=re.search(r'DEVPATH=="([^"]+)"',text)
+    if scope:
+        for sys in glob.glob('/sys'+scope[1]):
+            device=Path('/dev/input')/Path(sys).name
+            if device.exists():subprocess.run(['setfacl','-x','u:UID_VALUE',str(device)],check=True)
+    rule.unlink()
+WAYBRIDGE_CLEANUP
+rm -f /etc/systemd/system/ydotool-bridge.service
+udevadm control --reload-rules
+if getent group bridge-input >/dev/null; then
+ gpasswd -d "$target_user" bridge-input 2>/dev/null || true
+ if [[ -z $(getent group bridge-input | cut -d: -f4) ]]; then groupdel bridge-input; fi
+fi
+'''.replace('UID_VALUE',str(uid))
+
+def cleanup_user(cfg):
+    """Delete retired entrypoints and units; preserve incoming user documents."""
+    home=Path.home()
+    legacy=any((home/'.config/systemd/user'/name).exists() for name in ('bridge-key-code.service','bridge-note.service'))
+    subprocess.run(['systemctl','--user','stop','bridge-key-code.service','bridge-note.service'],capture_output=True,timeout=8)
+    for name in ('bridge-key-code.service','bridge-note.service'):
+        (home/'.config/systemd/user'/name).unlink(missing_ok=True)
+    for name in ('key-code.py','type-code.py','type-latest.py','bridge-clock.py','note-stream.py','send-answer'):
+        (home/'.local/bin'/name).unlink(missing_ok=True)
+    for name in ('note-waybar.jsonc','note-waybar.css','waybar-modules.json'):
+        (home/'.config/bridge'/name).unlink(missing_ok=True)
+    for name in ('latest-code','clock-hidden','input-state.json'):
+        (cfg.state/name).unlink(missing_ok=True)
+    for name in ('bridge-key-code.sock','waybridge-hold-input','waybridge-hold-reset','waybridge-hold-clock'):
+        (cfg.runtime/name).unlink(missing_ok=True)
+    # Obsolete control files are never project documents; regular delivery remains.
+    if legacy:
+        for name in ('clock.txt','clock.json','answer.txt'):
+            (cfg.inbox/name).unlink(missing_ok=True)
 
 def user_install(cfg,config):
     home=Path.home();backup=home/'.local/state/waybridge/backups'/time.strftime('%Y%m%d-%H%M%S')
@@ -53,32 +94,22 @@ def user_install(cfg,config):
         if path.exists():
             dest=backup/path.relative_to(home);dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(path,dest)
         atomic(path,data.encode());path.chmod(mode)
-    wrappers={'bridge':'control','key-code.py':'input','shot-send.sh':'shot request','bridge-clock.py':'clock','battery-link.py':'battery','note-stream.py':'notes','bridge-session-start.sh':'session-start','send-code':'send-code','send-answer':'send-answer','push-file.py':'send-code'}
-    if cfg.role=='helper':wrappers={k:v for k,v in wrappers.items() if k in {'bridge','send-code','send-answer','push-file.py'}}
-    else:wrappers={k:v for k,v in wrappers.items() if k not in {'send-code','send-answer','push-file.py'}}
+    cleanup_user(cfg)
+    wrappers={'bridge':'control','shot-send.sh':'shot request','battery-link.py':'battery','bridge-session-start.sh':'session-start','send-code':'send-code','push-file.py':'send-code'}
+    if cfg.role=='helper':wrappers={k:v for k,v in wrappers.items() if k in {'bridge','send-code','push-file.py'}}
+    else:wrappers={k:v for k,v in wrappers.items() if k not in {'send-code','push-file.py'}}
     for name,args in wrappers.items():
-        # Default worker command for backwards-compatible Waybar scripts.
-        if name=='bridge-clock.py':
-            write(home/'.local/bin'/name,'#!/bin/sh\nif [ \"$#\" -eq 0 ]; then set -- serve; fi\nexec '+command(config,'clock')+' \"$@\"\n',0o755)
-            continue
         write(home/'.local/bin'/name,'#!/bin/sh\nexec '+command(config,args)+' "$@"\n',0o755)
     units=home/'.config/systemd/user'
     if cfg.role=='client':
-        for name,args,wd in [('bridge-key-code','input serve',True),('bridge-shot-queue','shot serve',True),('bridge-files','files',False)]:
+        for name,args,wd in [('bridge-shot-queue','shot serve',True),('bridge-files','files',False)]:
             text=unit(config,args,wd)
-            if name=='bridge-key-code':text+='ExecStopPost=-'+command(config,'release')+'\n'
             write(units/(name+'.service'),text)
         for name,action in [('bridge-start','start'),('bridge-kill','stop')]:
             write(units/(name+'.service'),'[Unit]\nDescription=Waybridge '+action+'\n[Service]\nType=oneshot\nTimeoutStartSec=45\nExecStart='+command(config,'control '+action)+'\n')
         write(home/'.config/bridge/hypr-helper.lua','-- Helper startup disabled: this device is now a client.\n')
         bridge=home/'.config/bridge';bridge.mkdir(parents=True,exist_ok=True)
-        write(bridge/'hypr-client.lua',bindings(config,cfg.hold_ms))
-        note={'name':'bridge-note','layer':'overlay','position':'top','exclusive':False,'passthrough':True,'modules-center':['custom/bridge-note'],'custom/bridge-note':{'exec':command(config,'notes'),'return-type':'json','restart-interval':2,'escape':True,'tooltip':False}}
-        write(bridge/'note-waybar.jsonc',json.dumps(note,ensure_ascii=False,indent=2)+'\n')
-        write(bridge/'note-waybar.css','window#waybar { background: rgba(20,22,26,0.85); color: #eee; font-size: 16px; }\n#custom-bridge-note { padding: 8px; }\n')
-        write(units/'bridge-note.service','[Unit]\nDescription=Waybridge text panel\nPartOf=graphical-session.target\nStartLimitIntervalSec=60\nStartLimitBurst=3\n[Service]\nExecStart=/usr/bin/waybar -c '+str(bridge/'note-waybar.jsonc')+' -s '+str(bridge/'note-waybar.css')+'\nRestart=on-failure\nRestartSec=2\nTimeoutStopSec=3\n')
-        # Standalone include, never rewrites an unrelated user's Waybar layout.
-        write(bridge/'waybar-modules.json',json.dumps({'custom/bridge-clock':{'exec':command(config,'clock serve'),'return-type':'json','restart-interval':2,'escape':True},'custom/battery':{'exec':command(config,'battery'),'return-type':'json','restart-interval':3}},indent=2)+'\n')
+        write(bridge/'hypr-client.lua',bindings(config))
     else:
         write(units/'bridge-shot-view.service',unit(config,'gallery'))
         write(home/'.config/bridge/hypr-client.lua','-- Client controls disabled: this device is now a helper.\n')
@@ -86,7 +117,7 @@ def user_install(cfg,config):
     subprocess.run(['systemctl','--user','daemon-reload'],check=True,timeout=5)
     print('Installed user files. Backup:',backup)
     print('Client module:',home/'.config/bridge/hypr-client.lua')
-    print('No service was started; input remains OFF.')
+    print('Installed screenshot and file transport. No service was started.')
 
 def root_plan(cfg,config,keyfile,output):
     if str(cfg.inbox)!='/srv/bridge/inbox':raise ValueError('root installer requires /srv/bridge/inbox')
@@ -103,56 +134,33 @@ set -Eeuo pipefail
     text+='target_user='+q(cfg.user)+'\ntarget_uid='+str(uid)+'\n'
     text+='[[ $(id -u "$target_user") == "$target_uid" ]] || exit 1\n'
     text+='[[ $(tailscale ip -4) == '+q(cfg.own_ip)+' ]] || { echo "Tailscale IP changed"; exit 1; }\n'
-    dependencies='openssh nftables python inotify-tools '+('ydotool acl grim' if cfg.role=='client' else 'imv')
+    dependencies='openssh nftables python inotify-tools '+('acl grim' if cfg.role=='client' else 'imv')
     text+='pacman -S --needed --noconfirm '+dependencies+'\n'
     text+='for unit in bridge-inbox.service ydotool-bridge.service bridge-shot.service; do systemctl stop \"$unit\" 2>/dev/null || true; done\n'
     if cfg.role=='client':text+='systemctl disable bridge-shot.service 2>/dev/null || true\n'
     else:text+='systemctl disable bridge-inbox.service ydotool-bridge.service 2>/dev/null || true\n'
     text+='backup=/var/lib/waybridge/backups/$(date +%Y%m%d-%H%M%S)\ninstall -d -m 700 \"$backup\"\nfor path in /etc/bridge /etc/systemd/system/bridge-inbox.service /etc/systemd/system/bridge-shot.service /etc/systemd/system/bridge-filter.service /etc/systemd/system/ydotool-bridge.service /etc/udev/rules.d/90-bridge-key-code.rules /etc/polkit-1/rules.d/49-bridge-units.rules /usr/local/libexec/bridge/receive-shot.py; do\n if [[ -e $path ]]; then cp -a --parents \"$path\" \"$backup\"; fi\ndone\n'
+    text+=legacy_root_cleanup(uid)
     text+='install -d -o root -g root -m 755 /etc/bridge /etc/bridge/keys /usr/local/libexec/bridge\nssh-keygen -A\n'
     def put(path,data,mode=644):
         nonlocal text
         text+='cat > '+q(path)+" <<'WAYBRIDGE_FILE'\n"+data+'\nWAYBRIDGE_FILE\nchmod '+str(mode)+' '+q(path)+'\nchown root:root '+q(path)+'\n'
     if cfg.role=='client':
         text+='''getent group bridge-files >/dev/null || groupadd bridge-files
-getent group bridge-input >/dev/null || groupadd bridge-input
 if ! id bridge >/dev/null 2>&1; then useradd -M -g bridge-files -d /inbox -s /usr/bin/nologin bridge; fi
 [[ $(getent passwd bridge | cut -d: -f6) == /inbox ]] || exit 1
-usermod -aG bridge-files,bridge-input "$target_user"
+usermod -aG bridge-files "$target_user"
 install -d -o root -g root -m 755 /srv/bridge
 install -d -o bridge -g bridge-files -m 2770 /srv/bridge/inbox
 setfacl -m "u:$target_uid:rwx,d:u:$target_uid:rwx,d:m:rwx" /srv/bridge/inbox
 '''
-        # This version uses UID and root GID: socket mode confines access to one UID.
-        put('/etc/systemd/system/ydotool-bridge.service',f'''[Unit]
-Description=Waybridge scoped virtual keyboard
-[Service]
-ExecStart=/usr/bin/ydotoold --socket-path=/run/bridge-input/ydotool.sock --socket-own={uid}:0 --socket-perm=0660
-RuntimeDirectory=bridge-input
-RuntimeDirectoryMode=0755
-Restart=on-failure
-RestartSec=2
-TimeoutStopSec=3
-''')
-        keyboard_name=subprocess.check_output(['udevadm','info','--attribute-walk','--name',str(cfg.keyboard)],text=True,timeout=3)
-        import re
-        match=re.search(r'ATTRS\{name\}=="([^"\n]+)"',keyboard_name)
-        if not match:raise ValueError('keyboard parent name not found')
-        # Match sysfs parent name AND the exact selected event syspath, not all keyboards.
-        syspath=subprocess.check_output(['udevadm','info','--query=path','--name',str(cfg.keyboard)],text=True).strip()
-        parent=syspath.rsplit('/input',1)[0]
-        rule=f'ACTION=="add|change", SUBSYSTEM=="input", KERNEL=="event*", ATTRS{{name}}=="{match[1]}", DEVPATH=="{parent}/input*/event*", RUN+="/usr/bin/setfacl -m u:{uid}:r /dev/%k"'
-        put('/etc/udev/rules.d/90-bridge-key-code.rules',rule)
-        text+='udevadm control --reload-rules\nsetfacl -m u:'+str(uid)+':r '+q(cfg.keyboard)+'\n'
         put('/etc/polkit-1/rules.d/49-bridge-units.rules','''polkit.addRule(function(action, subject) {
     if (action.id === "org.freedesktop.systemd1.manage-units" && subject.user === '''+json.dumps(cfg.user)+''') {
         var unit = action.lookup("unit"), verb = action.lookup("verb");
-        if ((unit === "bridge-inbox.service" || unit === "ydotool-bridge.service") && (verb === "start" || verb === "stop")) return polkit.Result.YES;
+        if (unit === "bridge-inbox.service" && (verb === "start" || verb === "stop")) return polkit.Result.YES;
     }
 });''')
     else:
-        text+='rm -f /etc/udev/rules.d/90-bridge-key-code.rules\nudevadm control --reload-rules\n'
-        text+='if command -v setfacl >/dev/null && [[ -e '+q(cfg.keyboard)+' ]]; then setfacl -x u:'+str(uid)+' '+q(cfg.keyboard)+' || true; fi\n'
         put('/etc/polkit-1/rules.d/49-bridge-units.rules','polkit.addRule(function(action, subject) { if (action.id === \"org.freedesktop.systemd1.manage-units\" && subject.user === '+json.dumps(cfg.user)+' && action.lookup(\"unit\") === \"bridge-shot.service\" && (action.lookup(\"verb\") === \"start\" || action.lookup(\"verb\") === \"stop\")) return polkit.Result.YES; });')
         put('/usr/local/libexec/bridge/receive-shot.py','#!/bin/sh\nexec '+command(config,'receive'),755)
     auth='restrict,from="'+cfg.peer_ip+'" '+key
@@ -207,7 +215,7 @@ WantedBy=multi-user.target
 ''')
     text+='nft -c -f /etc/bridge/bridge-filter.nft\nsshd -t -f '+q(conf)+'\nsystemctl daemon-reload\nsystemctl enable bridge-filter.service\nsystemctl restart bridge-filter.service\n'
     if cfg.role=='helper':text+='systemctl disable bridge-shot.service\necho \"Use waybridge start in the graphical session\"\n'
-    else:text+='systemctl disable bridge-inbox.service ydotool-bridge.service\necho "Use waybridge control start in the graphical session; input stays OFF"\n'
+    else:text+='systemctl disable bridge-inbox.service\necho "Use waybridge start in the graphical session"\n'
     atomic(output,text.encode());output.chmod(0o700);print(output)
 
 

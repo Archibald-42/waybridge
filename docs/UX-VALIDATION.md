@@ -1,33 +1,12 @@
-# Проверки версии 0.3
+# UX · 3.5.0
 
-На используемой паре устройств выполнены:
+The installation flow is `git clone --branch v3.5.0`, then `bash setup.sh` on both
+machines and exchange of public pairing profiles. No keyboard selection, evdev ACL
+or input daemon is involved. The client has exactly three Numpad actions: start,
+screenshot, stop. Waybar uses its native clock and an optional transport-tinted
+battery module. Old answer display and input features are removed during upgrade.
 
-- Отдельно воспроизведён SIGSEGV imv 5.0.1: выбрана последняя из трёх картинок,
-  затем через IPC закрыта первая. Процесс завершился с -11.
-- С новой галереей три раза закрывали окно штатным quit и отправляли ровно один
-  снимок. Каждый раз создавался новый процесс, который оставался жив через три
-  секунды; повторная отправка для первого открытия не понадобилась.
-- Затем отправлены пять снимков подряд, очистка истории не завершила процесс.
-- Через внутренние переменные imv подтверждено декодирование PNG 1920×1080:
-  imv_loading=0, width/height положительные. Это проверка декодирования,
-  а не заявление о пиксельной идентичности визуального отображения.
-- Мастер setup полностью применён с sudo на текущем клиенте и помощнике;
-  оба завершились READY. Использованы существующие проверенные публичные ключи.
-- Аутентифицированный health-check клиента и SFTP-проверка помощника успешны.
-- На помощнике проверены start/stop через scoped polkit без sudo; сервисы после
-  start активны. Root endpoints отключены от системного автозапуска.
-- На клиенте сервисы активны, режим ввода OFF, Hyprland configerrors пуст.
-- Fish видит новую команду waybridge из нового shell; системный bridge сохраняется.
-
-27 автоматических тестов включают предыдущие проверки транспорта и ввода,
-модель ошибки индекса imv и безопасной очистки, hardlink lifetime, восстановление
-без новой отправки, обычное закрытие окна, публичные профили и границы формата,
-смену роли в конфигурации, root-планы обеих ролей, JSONC, повторную интеграцию,
-настройку Fish и совпадение версий CLI/venv Python после bootstrap.
-
-Смена реальных ролей на этой паре и установка на третьем физическом ПК не
-выполнялись, чтобы сохранить текущую пару. Проверены сгенерированные планы,
-операции конфигурации и повторная установка обеих существующих ролей. Новый ПК
-должен иметь поддерживаемые Arch/Hyprland Lua, работающий Tailscale и подходящую
-клавиатуру. Сложный непарсируемый конфиг Waybar мастер сохраняет без изменений
-и сообщает о ручном подключении.
+For a clean installation, `waybridge uninstall` retains documents and archives
+received data, while removing dedicated keys and configuration. Repeat the same
+setup flow; fresh profiles are required. Real deployment verification belongs in
+the release notes, separately from automated tests.

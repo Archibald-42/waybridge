@@ -30,8 +30,6 @@ def check(cfg):
         for name in items:
             r=subprocess.run(prefix+['is-active',name],capture_output=True,text=True,timeout=3)
             result(name,r.stdout.strip()=='active',r.stdout.strip())
-    if cfg.role=='client':
-        result('Доступ к выбранной клавиатуре',os.access(cfg.keyboard,os.R_OK),str(cfg.keyboard))
     alias='bridge-shot' if cfg.role=='client' else 'bridge-inbox'
     try:
         if cfg.role=='client':
@@ -44,5 +42,5 @@ def check(cfg):
             result('SFTP: доступ к inbox клиента',r.returncode==0)
     except (OSError,ValueError,subprocess.SubprocessError):result('SSH/SFTP',False,'проверьте профиль peer, питание ПК и сеть; затем повторите setup')
     if failed:print('Исправление настроек / смена ПК: waybridge setup')
-    else:print('Соединение готово. Ввод включается только вручную.')
+    else:print('Передача снимков и файлов готова.')
     return int(failed)

@@ -70,6 +70,7 @@ def configuration(own,peer,previous=None):
     if own['role']==peer['role']:raise ValueError('pair must contain one client and one helper')
     if own['ip']==peer['ip']:raise ValueError('choose the OTHER device profile')
     data=dict(previous or {})
+    for key in ('keyboard','hold_ms','api_timeout','loop_limit'):data.pop(key,None)
     data.update(role=own['role'],own_ip=own['ip'],peer_ip=peer['ip'],user=own['user'],
                 helper_user=peer['user'] if own['role']=='client' else own['user'])
     return data

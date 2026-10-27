@@ -117,6 +117,30 @@ class GalleryTests(unittest.TestCase):
 
 
 class InstallerTests(unittest.TestCase):
+    def test_upgrade_removes_legacy_units_and_keeps_project_documents(self):
+        from waybridge.install import user_install
+        with tempfile.TemporaryDirectory() as td:
+            home=Path(td);c=cfg(home);c.inbox.mkdir();c.projects.mkdir();c.state.mkdir()
+            user=home/'.config/systemd/user';user.mkdir(parents=True)
+            for name in ('bridge-key-code.service','bridge-note.service'):(user/name).write_text('old')
+            (c.inbox/'clock.txt').write_text('03:42');(c.projects/'main.py').write_text('keep')
+            with patch('pathlib.Path.home',return_value=home),patch.dict(os.environ,{'XDG_RUNTIME_DIR':td}),patch('waybridge.install.subprocess.run'),patch('sys.stdout',new_callable=io.StringIO):
+                user_install(c,home/'config.toml')
+            self.assertFalse((user/'bridge-key-code.service').exists());self.assertFalse((user/'bridge-note.service').exists())
+            self.assertTrue((user/'bridge-shot-queue.service').exists());self.assertTrue((user/'bridge-files.service').exists())
+            self.assertEqual((c.projects/'main.py').read_text(),'keep');self.assertFalse((c.inbox/'clock.txt').exists())
+            (c.inbox/'clock.txt').write_text('ordinary received document')
+            with patch('pathlib.Path.home',return_value=home),patch.dict(os.environ,{'XDG_RUNTIME_DIR':td}),patch('waybridge.install.subprocess.run'),patch('sys.stdout',new_callable=io.StringIO):
+                user_install(c,home/'config.toml')
+            self.assertEqual((c.inbox/'clock.txt').read_text(),'ordinary received document')
+    def test_uninstall_system_scope_and_bash_syntax(self):
+        from waybridge.uninstall import system_script
+        script=system_script('tester',1000)
+        self.assertIn('nft delete table inet bridge_guard',script)
+        self.assertNotIn('flush ruleset',script);self.assertNotIn('rm -rf /home',script)
+        self.assertNotIn('stop tailscale',script);self.assertNotIn('rm -rf /etc/ssh',script)
+        self.assertIn('userdel bridge',script)
+        subprocess.run(['bash','-n'],input=script,text=True,check=True)
     def test_role_plans_stop_old_endpoints_and_reload_firewall(self):
         from waybridge.install import root_plan
         for role in ('client','helper'):
@@ -128,7 +152,10 @@ class InstallerTests(unittest.TestCase):
                 text=plan.read_text()
                 self.assertIn('for unit in bridge-inbox.service ydotool-bridge.service bridge-shot.service',text)
                 self.assertIn('systemctl restart bridge-filter.service',text)
-                self.assertIn('systemctl disable bridge-shot.service' if role=='client' else 'systemctl disable bridge-inbox.service ydotool-bridge.service',text)
+                self.assertIn('rm -f /etc/systemd/system/ydotool-bridge.service',text)
+                self.assertNotIn('ydotoold --socket',text)
+                self.assertNotIn('RUN+=',text)
+                self.assertIn('systemctl disable bridge-shot.service' if role=='client' else 'systemctl disable bridge-inbox.service',text)
                 subprocess.run(['bash','-n',str(plan)],check=True)
     def test_integration_idempotent_and_role_change_restores_real_modules(self):
         from waybridge.integration import wire
@@ -139,7 +166,8 @@ class InstallerTests(unittest.TestCase):
             with patch('pathlib.Path.home',return_value=home),patch('sys.stdout',new_callable=io.StringIO):
                 wire(c,home/'config.toml');wire(c,home/'config.toml')
                 self.assertEqual(lua.read_text().count('hypr-client.lua'),1)
-                self.assertEqual(json.loads(bar.read_text())['modules-center'],['custom/bridge-clock'])
+                self.assertEqual(json.loads(bar.read_text())['modules-center'],['clock'])
+                self.assertEqual(json.loads(bar.read_text())['modules-right'],['custom/battery'])
                 wire(replace(c,role='helper'),home/'config.toml')
                 self.assertEqual(json.loads(bar.read_text())['modules-center'],['clock'])
                 self.assertEqual(json.loads(bar.read_text())['modules-right'],['battery'])
@@ -164,5 +192,9 @@ class BootstrapTests(unittest.TestCase):
             self.assertEqual(result.stdout.strip(),__version__)
             help_result=subprocess.run([str(prefix/'bin/waybridge'),'setup','--help'],capture_output=True,text=True,check=True)
             self.assertIn('--peer-profile',help_result.stdout)
+            self.assertNotIn('--keyboard',help_result.stdout)
+            cli=subprocess.run([str(prefix/'bin/waybridge'),'--help'],capture_output=True,text=True,check=True).stdout
+            for removed in ('send-answer','release','notes','clock,','input,'):self.assertNotIn(removed,cli)
+            self.assertFalse((project/'src/waybridge/keyboard.py').exists());self.assertFalse((project/'src/waybridge/inject.py').exists())
 
 if __name__=='__main__':unittest.main()

@@ -1,27 +1,22 @@
 # Security
 
-Waybridge is an explicitly configured transport and input tool. It is not a
-security boundary against another process running under the same Linux UID.
+Waybridge 3.5 transports screenshots and files over authenticated Tailscale/SSH.
+It has no keyboard interception, synthetic input, answer overlay or clock replacement.
+The Waybar battery indicator reports transport readiness; it does not acknowledge
+individual screenshot deliveries.
 
-Do not attach private SSH keys, Tailscale credentials, captured screens, incoming
-code, configuration files, pairing profiles, or unredacted journals to public issues. Runtime data
-lives outside the repository. The screenshot SSH endpoint accepts only a forced
-command; the file endpoint accepts only chrooted SFTP. Pin host keys through an
-authenticated channel; never bypass a changed host key warning.
+Dedicated endpoints use a chrooted SFTP account or a forced receive command.
+Host keys must be pinned through authenticated public profiles. Do not bypass
+changed-key warnings. Bindings require no /dev/input or /dev/uinput access.
 
-Input starts OFF and is never automatically rearmed after a service restart.
-Focus is checked at the compositor window level, not at the browser DOM level.
-Kill switch stops the bridge's units and virtual input daemon. It does not stop
-Tailscale or unrelated programs. SIGKILL and power loss erase RAM-only queues.
+Stop terminates only Waybridge services. It does not stop Tailscale or unrelated
+applications. RAM queues disappear on stop, SIGKILL and power loss. A process
+running under the same Linux UID is outside the application's trust boundary.
 
-No process-name spoofing, code obfuscation, polymorphic builds, anti-debugging,
-or claims of screen-capture exclusion are included. Source and releases remain
-inspectable. Release checksums verify local integrity, not author identity.
+Never attach private keys, pairing profiles, deployment configs, screenshots,
+received documents or unredacted logs to public issues. Release checksums verify
+local integrity, not author identity. Keep reports minimal and sanitized.
 
-If no private reporting channel is configured for a published fork, report only
-a minimal sanitized reproducer in its issue tracker; send no secrets.
-
-Pairing profiles contain public keys and deployment metadata only. Transfer them
-through authenticated Taildrop or a trusted physical channel and compare the
-profile code. Role/peer changes must also update root firewall/authorized keys;
-the wizard refuses to skip that step for an existing different role or peer.
+Uninstall preserves project documents and archives incoming files and screenshots
+outside the removed runtime. It removes dedicated transport keys; fresh pairing
+is required after a clean reinstall. General-purpose system packages are retained.

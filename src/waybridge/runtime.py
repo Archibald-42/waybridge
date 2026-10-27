@@ -66,9 +66,3 @@ def listener(path):
     s=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
     s.bind(str(path));path.chmod(0o600);s.listen(16);s.settimeout(.5)
     return s
-
-def active(timeout):
-    r=subprocess.run(['hyprctl','-j','activewindow'],capture_output=True,text=True,check=True,timeout=timeout)
-    address=json.loads(r.stdout).get('address')
-    if not address or address=='0x0':raise RuntimeError('no active window')
-    return address

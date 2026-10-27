@@ -1,2 +1,2 @@
 """WayBridge: stable, auditable service implementations."""
-__version__ = "0.3.0"
+__version__ = "3.5.0"

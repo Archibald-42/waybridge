@@ -42,7 +42,7 @@ def watch(folder):
     child.wait();raise RuntimeError('inotify watch failed')
 
 def publish(cfg,name):
-    if name in {'answer.txt','clock.txt','clock.json'} or not NAME.fullmatch(name):return False
+    if not NAME.fullmatch(name):return False
     source=cfg.inbox/name
     if source.suffix not in SUFFIXES:return False
     try:
@@ -61,7 +61,6 @@ def publish(cfg,name):
             atomic(cfg.state/'versions'/(name+'.'+digest),old)
             atomic(target,data)
     else:atomic(target,data)
-    if source.suffix!='.json':atomic(cfg.state/'latest-code',str(target).encode())
     return True
 
 def serve(cfg):
@@ -77,7 +76,3 @@ def serve(cfg):
         raise RuntimeError('inotify process exited')
     finally:child.terminate();child.wait(timeout=2)
 
-def answer(cfg,number,value):
-    if not 0<=number<=99 or not 0<=value<=99:raise ValueError('number and answer must be 0..99')
-    with tempfile.TemporaryDirectory(prefix='waybridge-answer-') as td:
-        path=Path(td)/'clock.txt';path.write_text(f'{number:02}:{value:02}\n');push(cfg,path,'clock.txt')
