@@ -1,4 +1,4 @@
-# Waybridge 3.5.0
+# Waybridge 3.5.1
 
 Два канала между Linux-компьютерами в Tailscale:
 
@@ -16,7 +16,7 @@
 На **обоих** устройствах из обычного терминала своей графической сессии:
 
 ```bash
-git clone --branch v3.5.0 --depth 1 https://github.com/Archibald-42/waybridge.git
+git clone --branch v3.5.1 --depth 1 https://github.com/Archibald-42/waybridge.git
 cd waybridge
 bash setup.sh
 ```
@@ -174,7 +174,7 @@ systemctl status bridge-shot.service
 PYTHONPATH=src python -m unittest discover -s tests -v
 python -W error -m compileall -q src scripts
 bash -n setup.sh
-python scripts/release.py --output ../waybridge-3.5.0.tar.gz
+python scripts/release.py --output ../waybridge-3.5.1.tar.gz
 sha256sum -c SHA256SUMS
 ```
 

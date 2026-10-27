@@ -63,8 +63,11 @@ def wire(cfg,config):
     home=Path.home();module='hypr-client.lua' if cfg.role=='client' else 'hypr-helper.lua'
     lua=home/'.config/hypr/hyprland.lua'
     if lua.exists():
-        text=lua.read_text()
-        if module not in text:write(lua,text+'\n-- Waybridge session module\ndofile(os.getenv("HOME") .. "/.config/bridge/'+module+'")\n')
+        original=lua.read_text()
+        text=''.join(line for line in original.splitlines(keepends=True)
+                     if not ('dofile' in line and '/.config/bridge/helper-start.lua' in line))
+        if module not in text:text+='\n-- Waybridge session module\ndofile(os.getenv("HOME") .. "/.config/bridge/'+module+'")\n'
+        if text!=original:write(lua,text)
         print('Hyprland: модуль подключён.')
     else:print('Hyprland Lua config не найден; подключите ~/.config/bridge/'+module+' вручную.')
     waybar=home/'.config/waybar/config.jsonc'

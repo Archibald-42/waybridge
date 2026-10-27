@@ -160,12 +160,13 @@ class InstallerTests(unittest.TestCase):
     def test_integration_idempotent_and_role_change_restores_real_modules(self):
         from waybridge.integration import wire
         with tempfile.TemporaryDirectory() as td:
-            home=Path(td);lua=home/'.config/hypr/hyprland.lua';lua.parent.mkdir(parents=True);lua.write_text('-- user config\n')
+            home=Path(td);lua=home/'.config/hypr/hyprland.lua';lua.parent.mkdir(parents=True);lua.write_text('-- user config\ndofile("/home/test/.config/bridge/helper-start.lua")\n')
             bar=home/'.config/waybar/config.jsonc';bar.parent.mkdir(parents=True);bar.write_text('{"modules-center":["clock"],"modules-right":["battery"]}')
             c=cfg(home)
             with patch('pathlib.Path.home',return_value=home),patch('sys.stdout',new_callable=io.StringIO):
                 wire(c,home/'config.toml');wire(c,home/'config.toml')
                 self.assertEqual(lua.read_text().count('hypr-client.lua'),1)
+                self.assertNotIn('helper-start.lua',lua.read_text())
                 self.assertEqual(json.loads(bar.read_text())['modules-center'],['clock'])
                 self.assertEqual(json.loads(bar.read_text())['modules-right'],['custom/battery'])
                 wire(replace(c,role='helper'),home/'config.toml')
