@@ -9,7 +9,7 @@ function report(stage, message, extra = {}) {
   status = {stage, message, retry: Boolean(pending), confirm: false,
     snapshot: pending ? `${pending.page.title} · ${pending.created_at}` : "", ...extra};
   browser.browserAction.setBadgeText({text: busy ? "…" : stage === "sent" ? "OK" : stage === "error" ? "!" : ""});
-  browser.browserAction.setTitle({title: `Waybridge: ${message}`});
+  browser.browserAction.setTitle({title: `Nordic Reader: ${message}`});
 }
 async function extract(tabId) {
   const result = await browser.tabs.executeScript(tabId, {code: `(${WaybridgeExtract.toString()})()`});
