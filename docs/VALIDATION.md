@@ -82,3 +82,18 @@ The user's actual Google Forms and its particular question types have not yet
 been validated. The extension is unsigned and needs temporary loading for this
 preview; a permanent Firefox installation requires the owner's Mozilla signing
 workflow. No signing setting in the user's existing profile was changed.
+
+
+# Nordic Reader · 3.6.0rc2
+
+The Python suite remains at 68 tests. `tests/nordic.cjs` additionally verifies
+respondent-domain restrictions, section deduplication, same-ID retry, warning
+review and disconnect/queue clearing on disable. Its real Chromium DOM fixture
+verifies Nordic styling, observation of changed sections, no resend for answer
+selection, and theme/observer removal. The isolated Firefox 158 test additionally
+enables/disables the actual bundled theme inside the extension content world.
+Manual capture and all existing page-export browser tests continue to pass.
+
+These fixtures are not a test against every Google Forms question type. No
+user's real form was exported by the test. Temporary extensions still require
+manual reload; this update does not change Mozilla signing protections.

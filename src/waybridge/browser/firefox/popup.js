@@ -4,6 +4,9 @@ async function refresh() {
   try {
     const state = await browser.runtime.sendMessage({action: "status"});
     statusElement.textContent = state.message;
+    document.getElementById("nordic").checked = Boolean(state.nordic);
+    document.getElementById("auto-status").textContent = `${state.autoMessage || "Режим выключен."} В очереди: ${state.queued || 0}.`;
+    document.getElementById("auto-confirm").hidden = !state.autoConfirm;
     document.getElementById("snapshot").textContent = state.snapshot ? "Подготовлен: " + state.snapshot : "";
     buttons.forEach(button => {button.disabled = state.busy;});
     document.getElementById("retry").hidden = !state.retry;
@@ -23,3 +26,22 @@ buttons.forEach(button => button.addEventListener("click", async () => {
 }));
 refresh();
 setInterval(refresh,500);
+
+document.getElementById("nordic").addEventListener("change", async event => {
+  const checkbox = event.target;
+  checkbox.disabled = true;
+  try {
+    if (checkbox.checked && !await browser.permissions.request({origins: ["<all_urls>"]})) {
+      checkbox.checked = false;
+      statusElement.textContent = "Разрешение необходимо для оформления сайтов и захвата разделов.";
+      return;
+    }
+    const result = await browser.runtime.sendMessage({action: "nordic-set", enabled: checkbox.checked});
+    if (!result.ok) throw new Error(result.error);
+  } catch (error) { statusElement.textContent = error.message; }
+  finally { checkbox.disabled = false; await refresh(); }
+});
+document.getElementById("auto-confirm").addEventListener("click", async () => {
+  await browser.runtime.sendMessage({action: "nordic-confirm"});
+  await refresh();
+});

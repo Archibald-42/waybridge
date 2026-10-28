@@ -47,7 +47,9 @@ jobs:
         env:
           WAYBRIDGE_PLAYWRIGHT: /tmp/waybridge-browser/node_modules/playwright
           WAYBRIDGE_PAGE_FIXTURE: /tmp/waybridge-chromium-page.json
-        run: node tests/browser-pages.cjs
+        run: |
+          node tests/browser-pages.cjs
+          node tests/nordic.cjs
       - name: Actual Firefox extension capture in isolated profile
         env:
           WAYBRIDGE_FIREFOX: ${{ steps.firefox.outputs.firefox-path }}

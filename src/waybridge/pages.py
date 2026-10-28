@@ -12,7 +12,7 @@ import struct
 import subprocess
 import time
 from .protocol import LIMIT,frame,parse,validate_png,verify_ack
-from .runtime import atomic
+from .runtime import atomic,signals
 
 MAGIC=b'WBP1'
 EXTENSION_ID='page-export@waybridge.local'
@@ -137,7 +137,7 @@ def receive(cfg,stream,first):
     print(json.dumps({'ok':True,**header}),flush=True)
 
 def send(cfg,doc):
-    if cfg.stopped.exists():raise RuntimeError('Клиент остановлен. Запустите Waybridge: Numpad 7.')
+    if cfg.stopped.exists():raise RuntimeError('Клиент остановлен. Запустите Waybridge: Win+X.')
     data=encode(doc)
     packet,header=frame(doc['id'],data,magic=MAGIC)
     error='Нет подтверждения приёмника. Обновите Waybridge на обоих ПК до 3.6.0.'
@@ -178,6 +178,7 @@ def read_exact(stream,size):
 
 def native(cfg,source=None,destination=None):
     import sys
+    if source is None:signals()  # Firefox disconnect cancels SSH through send() finally.
     source=source or sys.stdin.buffer;destination=destination or sys.stdout.buffer
     try:
         size=struct.unpack('=I',read_exact(source,4))[0]

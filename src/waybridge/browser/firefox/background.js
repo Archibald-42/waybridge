@@ -1,4 +1,4 @@
-/* User-triggered export only. One immutable pending snapshot, held in RAM. */
+/* Manual exports and the common immutable snapshot capture pipeline. */
 const HOST = "org.waybridge.page_export";
 const LIMIT = 32 * 1024 * 1024;
 let pending = null;
@@ -16,25 +16,29 @@ async function extract(tabId) {
   if (result.length !== 1) throw new Error("Не удалось прочитать основной документ вкладки.");
   return result[0];
 }
-async function capture() {
-  const [tab] = await browser.tabs.query({active: true, currentWindow: true});
-  if (!tab || !/^https?:\/\//.test(tab.url || "")) throw new Error("Откройте обычную HTTP/HTTPS-страницу для экспорта.");
-  if (tab.incognito) throw new Error("Экспорт из приватных вкладок отключён: снимок сохраняется на ПК.");
-  const before = await extract(tab.id);
+async function capture(tabId = null, cancelled = () => false, progress = message => report("capturing", message)) {
+  const tabs = await browser.tabs.query(tabId === null ? {active: true, currentWindow: true} : {active: true});
+  const selected = tabId === null ? tabs[0] : tabs.find(item => item.id === tabId);
+  if (tabId !== null && !selected) throw new Error("Вкладка больше не активна.");
+  if (!selected || !/^https?:\/\//.test(selected.url || "")) throw new Error("Откройте обычную HTTP/HTTPS-страницу для экспорта.");
+  if (selected.incognito) throw new Error("Экспорт из приватных вкладок отключён: снимок сохраняется на ПК.");
+  const before = await extract(selected.id);
   const {width, height} = before.page.geometry;
   if (width > 8192 || height > 100000 || width * height > 80000000) throw new Error("Раздел слишком большой для одного снимка. Предельная площадь — 80 млн пикселей.");
   const tiles = [];
   let encodedBytes = 0;
   for (let y = 0; y < height; y += 4096) {
-    report("capturing", `Снимаю раздел: ${Math.round(y / height * 100)}%.`);
+    if (cancelled()) throw new Error("Автоэкспорт отключён.");
+    progress(`Снимаю раздел: ${Math.round(y / height * 100)}%.`);
     const tileHeight = Math.min(4096, height - y);
-    const png = await browser.tabs.captureTab(tab.id, {format: "png", rect: {x: 0, y, width, height: tileHeight}, scale: 1});
+    const png = await browser.tabs.captureTab(selected.id, {format: "png", rect: {x: 0, y, width, height: tileHeight}, scale: 1});
     if (!png.startsWith("data:image/png;base64,")) throw new Error("Firefox не вернул PNG.");
     tiles.push({x: 0, y, width, height: tileHeight, png});
     encodedBytes += png.length;
     if (encodedBytes > LIMIT) throw new Error("Снимок превышает 32 МиБ. Раздел не отправлен.");
   }
-  const after = await extract(tab.id);
+  if (cancelled()) throw new Error("Автоэкспорт отключён.");
+  const after = await extract(selected.id);
   if (JSON.stringify(before) !== JSON.stringify(after)) throw new Error("Страница изменилась во время экспорта. Повторите после завершения изменений.");
   const snapshot = {format: "waybridge-page/1", id: crypto.randomUUID().replaceAll("-", ""),
     created_at: new Date().toISOString(), scope: "current-section", ...before, tiles};
@@ -50,9 +54,10 @@ async function deliver() {
   pending = null;
   report("sent", `Снимок сохранён на ПК. Вопросов: ${count}.`, {retry: false});
 }
-browser.runtime.onMessage.addListener(async message => {
-  if (message.action === "status") return {...status, busy};
-  if (busy) return {ok: false, error: "Экспорт уже выполняется."};
+browser.runtime.onMessage.addListener(async (message, sender) => {
+  if (message.action?.startsWith("nordic-") || message.action === "section") return Nordic.handle(message, sender);
+  if (message.action === "status") return {...status, busy, ...(typeof Nordic !== "undefined" ? Nordic.state() : {})};
+  if (busy || (typeof Nordic !== "undefined" && Nordic.capturing)) return {ok: false, error: "Экспорт уже выполняется."};
   if (!["export", "retry", "confirm"].includes(message.action)) return {ok: false, error: "Неизвестная команда."};
   busy = true;
   try {
@@ -74,6 +79,6 @@ browser.runtime.onMessage.addListener(async message => {
     return {ok: false, error: status.message};
   } finally {
     busy = false;
-    browser.browserAction.setBadgeText({text: status.stage === "sent" ? "OK" : status.stage === "error" ? "!" : status.stage === "review" ? "?" : ""});
+    browser.browserAction.setBadgeText({text: status.stage === "sent" ? "OK" : status.stage === "error" ? "!" : status.stage === "review" ? "?" : typeof Nordic !== "undefined" && Nordic.enabled ? "ON" : ""});
   }
 });

@@ -153,7 +153,7 @@ class NativeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             c=cfg(Path(td));c.state.mkdir();c.stopped.touch()
             with patch('waybridge.pages.subprocess.Popen') as process:
-                with self.assertRaisesRegex(RuntimeError,'Numpad 7'):pages.send(c,snapshot())
+                with self.assertRaisesRegex(RuntimeError,r'Win\+X'):pages.send(c,snapshot())
             process.assert_not_called()
     def test_killswitch_cancels_an_inflight_transfer(self):
         import subprocess

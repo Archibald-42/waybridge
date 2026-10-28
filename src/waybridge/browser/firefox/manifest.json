@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
-  "name": "Waybridge Page Export",
-  "version": "3.6.0",
-  "description": "Export the current section as ordered text and a full visual reference to your paired PC.",
+  "name": "Nordic Reader — Waybridge",
+  "version": "3.6.0.2",
+  "description": "Nord theme and explicit automatic export of active Google Forms sections to your paired PC.",
   "browser_specific_settings": {
     "gecko": {
       "id": "page-export@waybridge.local",
@@ -17,7 +17,8 @@
   },
   "permissions": [
     "activeTab",
-    "nativeMessaging"
+    "nativeMessaging",
+    "storage"
   ],
   "optional_permissions": [
     "<all_urls>"
@@ -25,12 +26,14 @@
   "background": {
     "scripts": [
       "extract.js",
-      "background.js"
+      "section-key.js",
+      "background.js",
+      "nordic.js"
     ],
     "persistent": true
   },
   "browser_action": {
-    "default_title": "Waybridge — экспорт раздела",
+    "default_title": "Nordic Reader — тема и экспорт Forms",
     "default_popup": "popup.html"
   },
   "icons": {

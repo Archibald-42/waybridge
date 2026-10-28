@@ -20,7 +20,7 @@ class SendingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             c=cfg(Path(td));source=Path(td)/'main.py';source.write_text('keep me')
             with patch('waybridge.files.sftp',return_value=subprocess.CompletedProcess([],255,'','Connection refused')) as transfer,patch('waybridge.files.time.sleep'):
-                with self.assertRaisesRegex(RuntimeError,'Numpad 7'):push(c,source)
+                with self.assertRaisesRegex(RuntimeError,r'Win\+X'):push(c,source)
             self.assertEqual(transfer.call_count,3);self.assertEqual(source.read_text(),'keep me')
     def test_bad_host_key_is_not_retried_or_bypassed(self):
         with tempfile.TemporaryDirectory() as td:

@@ -33,10 +33,10 @@ LimitCORE=0
 '''+('WatchdogSec=4\nWatchdogSignal=SIGKILL\nNotifyAccess=main\n' if watchdog else '')
 
 def bindings(config):
-    lines=['-- Waybridge: physical Numpad keycodes; NumLock-independent.']
-    for code,action in [(79,'start'),(80,'shot'),(81,'kill')]:
+    lines=['-- Waybridge: Win+Z stop, Win+X start, Win+A screenshot; physical QWERTY positions.']
+    for code,action in [(52,'kill'),(53,'start'),(38,'shot')]:
         down=command(config,'trigger '+action+' down')
-        lines.append('hl.bind('+json.dumps(' + code:'+str(code))+', hl.dsp.exec_cmd('+json.dumps(down)+'))')
+        lines.append('hl.bind('+json.dumps('SUPER + code:'+str(code))+', hl.dsp.exec_cmd('+json.dumps(down)+'))')
     lines+=['hl.permission("/usr/bin/grim", "screencopy", "allow")',
             'hl.on("hyprland.start", function() hl.exec_cmd('+json.dumps(command(config,'session-start'))+') end)']
     return '\n'.join(lines)+'\n'

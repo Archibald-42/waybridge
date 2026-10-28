@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "waybridge"
-version = "3.6.0rc1"
+version = "3.6.0rc2"
 description = "Explicitly controlled Wayland file and screenshot bridge over Tailscale"
 requires-python = ">=3.11"
 license = "MIT"

@@ -56,8 +56,8 @@ class ControlsTests(unittest.TestCase):
     def test_only_transport_hotkeys_remain(self):
         text=bindings(Path('/home/test/config.toml'))
         self.assertEqual(text.count('hl.bind('),3)
-        for code in (79,80,81):self.assertIn('code:'+str(code),text)
-        for removed in ('code:83','code:84','code:85','ydotool','keyboard'):
+        for code in (52,53,38):self.assertIn('code:'+str(code),text)
+        for removed in ('code:79','code:80','code:81','code:83','code:84','code:85','ydotool','keyboard'):
             self.assertNotIn(removed,text)
 
 class StorageTests(unittest.TestCase):

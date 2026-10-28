@@ -28,7 +28,7 @@ def transfer_error(detail):
     detail=detail.strip()[-600:]
     if any(text in detail.lower() for text in ('host key verification failed','remote host identification has changed','permission denied (publickey','no such identity')):
         return 'SSH не прошёл проверку ключей. Выполните waybridge check; при смене ПК повторите setup с проверенным профилем. '+detail
-    return 'Клиент недоступен или SFTP отклонил загрузку. На ноутбуке выполните waybridge start (Numpad 7), затем waybridge check. Исходник на ПК сохранён. '+detail
+    return 'Клиент недоступен или SFTP отклонил загрузку. На ноутбуке выполните waybridge start (Win+X), затем waybridge check. Исходник на ПК сохранён. '+detail
 
 
 def receipt(cfg,identifier,data):

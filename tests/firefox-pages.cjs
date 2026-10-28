@@ -48,6 +48,12 @@ const root=path.resolve(__dirname,'..');
   (async()=>{
    try{
     const bundle=await capture();
+    await Nordic.handle({action:'nordic-set',enabled:true},{});
+    const themed=await browser.tabs.executeScript({code:'DarkReader.isEnabled()'});
+    if(!themed[0])throw new Error('Nordic theme did not enable in Firefox content world');
+    await Nordic.handle({action:'nordic-set',enabled:false},{});
+    const restored=await browser.tabs.executeScript({code:'DarkReader.isEnabled()'});
+    if(restored[0])throw new Error('Nordic theme did not disable');
     const ack=${process.env.WAYBRIDGE_TEST_NATIVE==='1' ? "await browser.runtime.sendNativeMessage(HOST,{action:'send',snapshot:bundle})" : 'null'};
     await fetch(${JSON.stringify(reportURL)},{method:'POST',body:JSON.stringify({bundle,ack})});
    }catch(error){await fetch(${JSON.stringify(reportURL)},{method:'POST',body:JSON.stringify({error:error.message,stack:error.stack})});}
@@ -59,6 +65,7 @@ const root=path.resolve(__dirname,'..');
   const bundle=result.bundle;
   if(process.env.WAYBRIDGE_FIREFOX_FIXTURE)fs.writeFileSync(process.env.WAYBRIDGE_FIREFOX_FIXTURE,JSON.stringify(bundle));
   assert(bundle.tiles.length>=2);assert(bundle.page.questions[0].options[0].label==='Третий вариант');
+  console.log('FIREFOX_NORDIC_LIFECYCLE_PASSED');
   console.log('FIREFOX_CAPTURE_PASSED',bundle.page.geometry.width,bundle.page.geometry.height,bundle.tiles.length);
   if(process.env.WAYBRIDGE_TEST_NATIVE==='1'){
    assert(result.ack.ok,JSON.stringify(result.ack));assert.equal(result.ack.id,bundle.id);
