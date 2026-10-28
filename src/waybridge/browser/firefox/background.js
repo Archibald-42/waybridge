@@ -12,7 +12,7 @@ function report(stage, message, extra = {}) {
   browser.browserAction.setTitle({title: `Nordic Reader: ${message}`});
 }
 async function extract(tabId) {
-  const result = await browser.tabs.executeScript(tabId, {code: `(${WaybridgeExtract.toString()})()`});
+  const result = await browser.tabs.executeScript(tabId, {code: `(${WaybridgeExtract.toString()})(${WaybridgeFormURL.toString()})`});
   if (result.length !== 1) throw new Error("Не удалось прочитать основной документ вкладки.");
   return result[0];
 }

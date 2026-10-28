@@ -26,7 +26,7 @@ async function controller() {
     };return port;
    }}
   }};
- vm.createContext(sandbox); vm.runInContext(source('section-key.js'), sandbox);
+ vm.createContext(sandbox); vm.runInContext(source('forms.js'), sandbox); vm.runInContext(source('section-key.js'), sandbox);
  vm.runInContext(source('nordic.js'), sandbox);
  const control = vm.runInContext('Nordic', sandbox);
  await control.handle({action:'nordic-set',enabled:true}, {});
@@ -36,6 +36,14 @@ async function controller() {
   async tick() {const callbacks=[...timers.values()];timers.clear();for(const fn of callbacks)fn();await this.flush();}};
 }
 (async () => {
+ const sandbox = {URL};vm.createContext(sandbox);vm.runInContext(source('forms.js'),sandbox);
+ const canonical = value => sandbox.WaybridgeFormURL(value);
+ const legacyURL = 'https://docs.google.com/forms/viewform?embedded=true&id=fixture_1&hl=ru&token=secret#fragment';
+ assert.equal(canonical(legacyURL),'https://docs.google.com/forms/d/fixture_1/viewform');
+ assert.equal(canonical('https://docs.google.com/forms/u/0/viewform?id=fixture_1'),'https://docs.google.com/forms/d/fixture_1/viewform');
+ assert.equal(canonical('https://docs.google.com/forms/d/e/fixture/viewform?usp=secret'),'https://docs.google.com/forms/d/e/fixture/viewform');
+ for(const url of ['https://evil.example/forms/viewform?id=a','https://docs.google.com.evil.example/forms/viewform?id=a','https://docs.google.com/forms/d/a/edit','https://docs.google.com/forms/viewform','http://docs.google.com/forms/viewform?id=a','https://docs.google.com/forms/viewform?id=../../escape'])assert.equal(canonical(url),null,url);
+ console.log('PASS modern and legacy respondent URLs, canonical form IDs, rejection of editor/missing IDs/foreign origins');
  let run = await controller();
  assert.equal((await run.control.handle({action:'section',key:run.key()},{tab:{...formTab,url:'https://evil.example/forms/d/e/f/viewform'}})).accepted,false);
  assert.equal((await run.control.handle({action:'section',key:run.key()},{tab:formTab})).accepted,true);
@@ -54,14 +62,21 @@ async function controller() {
  await run.control.handle({action:'section',key:run.key()},{tab:formTab});await run.flush();
  const before=run.disconnected();await run.control.handle({action:'nordic-set',enabled:false},{});await run.flush();
  assert.equal(run.control.state().queued,0);assert(run.disconnected()>before);
+ run = await controller();
+ run.set({...snapshot('legacy'), page:{...snapshot('legacy').page,url:'https://docs.google.com/forms/d/fixture_1/viewform'}});
+ assert.equal((await run.control.handle({action:'section',key:run.key()},{tab:{...formTab,url:legacyURL}})).accepted,true);
+ await run.flush();assert.deepEqual(run.sends,['legacy']);
+ console.log('PASS legacy sender reaches the acknowledged auto queue');
  console.log('PASS auto queue: domain restriction, dedup, same-ID retry, warning review, cancellation');
  const browser=await chromium.launch({headless:true});
  try {
   const page=await browser.newPage();
-  await page.route('https://docs.google.com/**', route=>route.fulfill({contentType:'text/html',body:fs.readFileSync(path.join(__dirname,'fixtures/form.html'),'utf8')}));
-  await page.goto(formTab.url);
+  await page.route('https://docs.google.com/**', route=>route.fulfill({contentType:'text/html',body:fs.readFileSync(path.join(__dirname,'fixtures/form.html'),'utf8').replaceAll('<fieldset>', '<div class="ss-form-question">').replaceAll('</fieldset>','</div>').replaceAll('<legend>','<div class="ss-q-title">').replaceAll('</legend>','</div>')}));
+  await page.goto(legacyURL);
   await page.evaluate(() => {window.reports=[];window.browser={runtime:{sendMessage:async m=>{window.reports.push(m);return {accepted:true};}}};});
-  for(const name of ['darkreader.js','extract.js','section-key.js','content.js'])await page.addScriptTag({content:source(name)});
+  await page.evaluate(() => {window.previousDisabled=false;window.WaybridgeNordic={set: value => {if(value===false)window.previousDisabled=true;}};});
+  for(const name of ['forms.js','darkreader.js','extract.js','section-key.js','content.js'])await page.addScriptTag({content:source(name)});
+  assert(await page.evaluate(() => window.previousDisabled));
   await page.evaluate(() => WaybridgeNordic.set(true));
   await page.waitForFunction(() => window.reports.length===1);
   assert(await page.evaluate(() => DarkReader.isEnabled()));
@@ -69,11 +84,11 @@ async function controller() {
   assert.notEqual(themed,'rgb(255, 255, 255)');
   await page.evaluate(() => {document.querySelector('input[type="radio"]').checked=true;document.querySelector('textarea')?.dispatchEvent(new Event('input'));});
   await page.waitForTimeout(1700);assert.equal(await page.evaluate(() => window.reports.length),1);
-  await page.evaluate(() => {document.querySelector('[role="heading"],legend,h2,h3').textContent='NEW SECTION';});
+  await page.evaluate(() => {document.querySelector('[role="heading"],legend,h2,h3,.ss-q-title').textContent='NEW SECTION';});
   await page.waitForFunction(() => window.reports.length===2);
   await page.evaluate(() => WaybridgeNordic.set(false));
   assert.equal(await page.evaluate(() => DarkReader.isEnabled()),false);
-  await page.evaluate(() => {document.querySelector('[role="heading"],legend,h2,h3').textContent='AFTER DISABLE';});
+  await page.evaluate(() => {document.querySelector('[role="heading"],legend,h2,h3,.ss-q-title').textContent='AFTER DISABLE';});
   await page.waitForTimeout(1700);assert.equal(await page.evaluate(() => window.reports.length),2);
   console.log('PASS real DOM: Nordic palette, section observer, answer dedup, disable restores page and stops export');
  } finally {await browser.close();}

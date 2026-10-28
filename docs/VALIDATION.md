@@ -97,3 +97,26 @@ Manual capture and all existing page-export browser tests continue to pass.
 These fixtures are not a test against every Google Forms question type. No
 user's real form was exported by the test. Temporary extensions still require
 manual reload; this update does not change Mozilla signing protections.
+
+
+# Legacy Forms and indicator fix · 3.6.0rc3
+
+The suite has 70 Python tests, including a regression where Tailscale reports
+Self.Online=false while BackendState is Running and the peer is reachable.
+The browser queue and DOM tests now cover legacy /forms/viewform?id=... URLs,
+canonical form identity without unrelated query parameters, legacy question
+markup, and replacement of an older injected controller. Foreign origins,
+editor URLs and missing/invalid legacy IDs remain excluded.
+
+The real isolated-profile Firefox integration now additionally drives the full
+content observer -> runtime message -> background capture -> automatic queue
+pipeline on a legacy-path fixture. Only its temporary test clone admits the
+loopback origin; production origin restrictions remain intact. CI mocks only the
+native ACK in this variant. A local integration run used the real native port and
+pinned SSH endpoint instead and obtained a matching durable ACK from the paired PC.
+
+The supplied public form HTML was fetched separately for a read-only extraction
+check: 8 questions and 27 options were recognized. Assets were blocked in that
+static reproduction, so it is not evidence of complete live rendering. No form
+submission was performed. User-profile activation still needs Firefox's temporary
+extension reload and should be checked against the live form after that reload.

@@ -17,7 +17,7 @@
 На **обоих** устройствах из обычного терминала своей графической сессии:
 
 ```bash
-git clone --branch v3.6.0-rc.2 --depth 1 https://github.com/Archibald-42/waybridge.git
+git clone --branch v3.6.0-rc.3 --depth 1 https://github.com/Archibald-42/waybridge.git
 cd waybridge
 bash setup.sh
 ```
@@ -143,7 +143,7 @@ bridge-filter.service      — системный фильтр входящег�
 
 ```bash
 git fetch --tags origin
-git switch --detach v3.6.0-rc.2
+git switch --detach v3.6.0-rc.3
 bash setup.sh --update
 waybridge check
 ```
@@ -193,7 +193,7 @@ systemctl status bridge-shot.service
 PYTHONPATH=src python -m unittest discover -s tests -v
 python -W error -m compileall -q src scripts
 bash -n setup.sh
-python scripts/release.py --output ../waybridge-3.6.0-rc.2.tar.gz
+python scripts/release.py --output ../waybridge-3.6.0-rc.3.tar.gz
 sha256sum -c SHA256SUMS
 ```
 

@@ -1,12 +1,12 @@
 /* One controller per document, including repeated tab activations. */
 (() => {
-  if (globalThis.WaybridgeNordic) return;
+  if (globalThis.WaybridgeNordic?.version === 3) return;
+  if (globalThis.WaybridgeNordic) void globalThis.WaybridgeNordic.set(false);
   let enabled = false, timer = null, inFlight = false, lastKey = null, scheduledAt = 0;
-  const form = location.origin === "https://docs.google.com" &&
-    /^\/forms\/(?:u\/\d+\/)?d\/(?:e\/)?[^/]+\/(?:viewform|formResponse)\/?$/.test(location.pathname);
+  const form = () => Boolean(WaybridgeFormURL(location.href));
   function schedule(delay = 1400) {
     clearTimeout(timer);
-    if (enabled && form && !document.hidden) {
+    if (enabled && form() && !document.hidden) {
       const now = Date.now();
       if (delay === 1400) {
         if (!scheduledAt) scheduledAt = now;
@@ -48,12 +48,12 @@
       DarkReader.enable({mode: 1, brightness: 100, contrast: 100, sepia: 0,
         darkSchemeBackgroundColor: "#2e3440", darkSchemeTextColor: "#d8dee9",
         selectionColor: "#5e81ac"});
-      if (form) observer.observe(document.documentElement, {subtree: true, childList: true,
+      if (form()) observer.observe(document.documentElement, {subtree: true, childList: true,
         characterData: true, attributes: true, attributeFilter: ["hidden", "aria-hidden", "src", "class", "style"]});
       schedule();
     } else DarkReader.disable();
   }
-  globalThis.WaybridgeNordic = {set};
+  globalThis.WaybridgeNordic = {version: 3, set};
   document.addEventListener("visibilitychange", () => schedule());
   document.addEventListener("load", () => schedule(), true);
   document.addEventListener("error", () => schedule(), true);

@@ -1,5 +1,5 @@
 /* Self-contained: executed in Firefox's isolated content-script world. */
-function WaybridgeExtract() {
+function WaybridgeExtract(formURL = globalThis.WaybridgeFormURL) {
   const visible = element => {
     const css = getComputedStyle(element);
     return element.getClientRects().length > 0 && css.display !== "none" && css.visibility !== "hidden" && !element.closest('[aria-hidden="true"]');
@@ -13,12 +13,12 @@ function WaybridgeExtract() {
       element.innerText || element.getAttribute("placeholder") || element.name || element.type);
   };
   const optionSelector = '[role="radio"],[role="checkbox"],input[type="radio"],input[type="checkbox"]';
-  const questionCandidates = Array.from(document.querySelectorAll('[role="listitem"],fieldset'))
-    .filter(el => visible(el) && el.querySelector('[role="heading"],legend,h2,h3'));
+  const questionCandidates = Array.from(document.querySelectorAll('[role="listitem"],fieldset,.ss-form-question'))
+    .filter(el => visible(el) && el.querySelector('[role="heading"],legend,h2,h3,.ss-q-title'));
   const cards = questionCandidates.filter(el => !questionCandidates.some(other => other !== el && el.contains(other)));
   const questions = cards.map((card, index) => ({
     id: `q${String(index + 1).padStart(4, "0")}`,
-    title: clean(card.querySelector('[role="heading"],legend,h2,h3')?.innerText),
+    title: clean(card.querySelector('[role="heading"],legend,h2,h3,.ss-q-title')?.innerText),
     text: clean(card.innerText),
     options: Array.from(card.querySelectorAll(optionSelector)).filter(visible)
       .filter(el => !el.parentElement?.closest(optionSelector) || !card.contains(el.parentElement.closest(optionSelector)))
@@ -50,6 +50,6 @@ function WaybridgeExtract() {
     height: Math.ceil(Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight || 0, innerHeight)),
     scrollX: Math.max(0, Math.round(scrollX)), scrollY: Math.max(0, Math.round(scrollY)),
     viewportWidth: innerWidth, viewportHeight: innerHeight};
-  return {page: {title: document.title, url: location.origin + location.pathname,
+  return {page: {title: document.title, url: (formURL && formURL(location.href)) || location.origin + location.pathname,
     text: clean(document.body?.innerText), questions, fields, images, geometry}, warnings};
 }

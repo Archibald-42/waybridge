@@ -54,7 +54,9 @@ jobs:
         env:
           WAYBRIDGE_FIREFOX: ${{ steps.firefox.outputs.firefox-path }}
           WAYBRIDGE_FIREFOX_FIXTURE: /tmp/waybridge-firefox-page.json
-        run: node tests/firefox-pages.cjs
+        run: |
+          node tests/firefox-pages.cjs
+          WAYBRIDGE_FIREFOX_AUTO=1 node tests/firefox-pages.cjs
       - name: Validate browser-generated documents and package extension
         run: |
           PYTHONPATH=src python - <<'PY'

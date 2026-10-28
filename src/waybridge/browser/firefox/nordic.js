@@ -3,11 +3,12 @@ const Nordic = (() => {
   let enabled = false, generation = 0, capturing = false, sending = false;
   let queue = [], delivered = new Set(), timer = null, port = null;
   const applying = new Map();
+  let problem = false;
   let message = "Nordic и автоэкспорт выключены.";
   const ready = browser.storage.local.get("nordicEnabled").then(value => {
     enabled = value.nordicEnabled === true;
   }).catch(() => { message = "Не удалось прочитать настройки. Режим выключен."; });
-  function state() { return {nordic: enabled, autoMessage: message,
+  function state() { return {nordic: enabled, autoMessage: message, autoProblem: problem,
     queued: queue.length, autoConfirm: Boolean(queue[0]?.review)}; }
   function badge() {
     browser.browserAction.setBadgeText({text: queue[0]?.review ? "?" : ""});
@@ -15,12 +16,9 @@ const Nordic = (() => {
   }
   function isForm(tab) {
     if (!tab || tab.incognito) return false;
-    try {
-      const url = new URL(tab.url);
-      return url.origin === "https://docs.google.com" &&
-        /^\/forms\/(?:u\/\d+\/)?d\/(?:e\/)?[^/]+\/(?:viewform|formResponse)\/?$/.test(url.pathname);
-    } catch (_) { return false; }
+    return Boolean(WaybridgeFormURL(tab.url));
   }
+
   function apply(tabId) {
     if (applying.has(tabId)) return applying.get(tabId).then(() => apply(tabId));
     const operation = inject(tabId).finally(() => applying.delete(tabId));
@@ -30,15 +28,21 @@ const Nordic = (() => {
     try {
       const tab = await browser.tabs.get(tabId);
       if (tab.incognito || !/^https?:\/\//.test(tab.url || "")) return;
-      const exists = await browser.tabs.executeScript(tabId, {code: "Boolean(globalThis.WaybridgeNordic)"});
+      const exists = await browser.tabs.executeScript(tabId, {code: "globalThis.WaybridgeNordic?.version === 3"});
       if (!exists[0]) {
         if (!enabled || token !== generation) return;
-        for (const file of ["darkreader.js", "extract.js", "section-key.js", "content.js"])
+        await browser.tabs.executeScript(tabId, {code: "globalThis.WaybridgeNordic?.set(false); true"});
+        for (const file of ["forms.js", "darkreader.js", "extract.js", "section-key.js", "content.js"])
           await browser.tabs.executeScript(tabId, {file, runAt: "document_idle"});
       }
       // Read current mode after injection: disabling during injection must win.
-      await browser.tabs.executeScript(tabId, {code: `globalThis.WaybridgeNordic?.set(${enabled})`});
-    } catch (_) { /* Firefox restricted pages remain untouched. */ }
+      await browser.tabs.executeScript(tabId, {code: `globalThis.WaybridgeNordic?.set(${enabled}); true`});
+    } catch (error) {
+      const tab = await browser.tabs.get(tabId).catch(() => null);
+      if (enabled && isForm(tab)) {
+        problem = true; message = "Не удалось подключить форму: " + (error.message || String(error)); badge();
+      }
+    }
   }
   async function applyAll() {
     for (const tab of await browser.tabs.query({})) await apply(tab.id);
@@ -66,20 +70,20 @@ const Nordic = (() => {
     clearTimeout(timer);
     if (!enabled || sending || !queue.length) return;
     if (queue[0].review) {
-      message = "Нужно подтверждение: " + queue[0].snapshot.warnings.join(" "); badge(); return;
+      problem = true; message = "Нужно подтверждение: " + queue[0].snapshot.warnings.join(" "); badge(); return;
     }
     sending = true;
     const token = generation, item = queue[0];
     try {
-      message = "Передаю раздел на ПК…"; badge();
+      problem = false; message = "Передаю раздел на ПК…"; badge();
       const ack = await native(item.snapshot);
       if (token !== generation) return;
       if (!ack?.ok || ack.id !== item.snapshot.id) throw new Error(ack?.error || "Неверное подтверждение ПК.");
       queue.shift(); delivered.add(item.key);
       if (delivered.size > 64) delivered.delete(delivered.values().next().value);
-      message = "Раздел сохранён на ПК.";
+      problem = false; message = "Раздел сохранён на ПК.";
     } catch (error) {
-      if (token === generation) message = `${error.message} Повтор через 15 с; снимок сохранён в памяти.`;
+      if (token === generation) { problem = true; message = `${error.message} Повтор через 15 с; снимок сохранён в памяти.`; }
     } finally {
       sending = false;
       if (enabled) { badge(); timer = setTimeout(drain, queue[0] === item ? 15000 : 0); }
@@ -91,7 +95,7 @@ const Nordic = (() => {
     if (delivered.has(key) || queue.some(item => item.key === key)) return {accepted: true};
     const bytes = queue.reduce((sum, item) => sum + item.bytes, 0);
     if (busy || capturing || queue.length >= 3 || bytes > 32 * 1024 * 1024) {
-      message = "Очередь занята. Дождитесь сохранения разделов на ПК."; badge();
+      problem = true; message = "Очередь занята. Дождитесь сохранения разделов на ПК."; badge();
       return {accepted: false, retryAfter: 5000};
     }
     capturing = true; const token = generation;
@@ -103,11 +107,11 @@ const Nordic = (() => {
       const size = new TextEncoder().encode(JSON.stringify(snapshot)).length;
       if (bytes + size > 64 * 1024 * 1024) throw new Error("Очередь достигла 64 МиБ.");
       queue.push({key, snapshot, bytes: size, review: snapshot.warnings.length > 0});
-      if (queue[0].review) message = "Нужно подтверждение: " + queue[0].snapshot.warnings.join(" ");
+      if (queue[0].review) { problem = true; message = "Нужно подтверждение: " + queue[0].snapshot.warnings.join(" "); }
       badge(); void drain();
       return {accepted: true};
     } catch (error) {
-      if (token === generation) { message = error.message; badge(); }
+      if (token === generation) { problem = true; message = error.message; badge(); }
       return {accepted: false, retryAfter: 5000};
     } finally { capturing = false; }
   }
@@ -124,14 +128,14 @@ const Nordic = (() => {
       return {ok: false, error: "Разрешите доступ к страницам в Firefox."};
     // Persist before changing live state, so a failed write cannot claim success.
     await browser.storage.local.set({nordicEnabled: value});
-    enabled = value; generation++; clearTimeout(timer);
+    enabled = value; problem = false; generation++; clearTimeout(timer);
     queue = []; delivered.clear();
     if (port) port.disconnect();
     message = enabled ? "Nordic включён. Активные разделы Google Forms отправляются на ПК." : "Nordic выключен. Очередь автоматической отправки очищена.";
     badge(); await applyAll(); return {ok: true};
   }
   browser.tabs.onUpdated.addListener((id, change) => {
-    if (change.status === "complete") void ready.then(() => { if (enabled) return apply(id); });
+    if (change.status === "complete" || change.url) void ready.then(() => { if (enabled) return apply(id); });
   });
   browser.tabs.onActivated.addListener(info => { void ready.then(() => { if (enabled) return apply(info.tabId); }); });
   void ready.then(async () => {

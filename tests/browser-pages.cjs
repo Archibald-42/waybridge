@@ -8,6 +8,7 @@ const {webcrypto} = require('node:crypto');
 const {chromium} = require(process.env.WAYBRIDGE_PLAYWRIGHT || 'playwright');
 const root = path.resolve(__dirname, '..');
 const assets = path.join(root, 'src/waybridge/browser/firefox');
+const formsSource = fs.readFileSync(path.join(assets, 'forms.js'), 'utf8');
 const extractionSource = fs.readFileSync(path.join(assets, 'extract.js'), 'utf8');
 const backgroundSource = fs.readFileSync(path.join(assets, 'background.js'), 'utf8');
 (async () => {
@@ -37,7 +38,7 @@ const backgroundSource = fs.readFileSync(path.join(assets, 'background.js'), 'ut
   let savedSnapshot;
   async function context({failOnce=false,mutate=false,warn=false,permission=true}={}) {
    let handler;let reads=0;let sends=0;let ids=[];
-   const sandbox={crypto:webcrypto,TextEncoder,console,browser:{
+   const sandbox={crypto:webcrypto,TextEncoder,URL,console,browser:{
     browserAction:{setBadgeText:()=>{},setTitle:()=>{}},
     permissions:{contains:async()=>permission},
     tabs:{query:async()=>[{id:1,url:page.url()}],executeScript:async()=>{
@@ -55,7 +56,7 @@ const backgroundSource = fs.readFileSync(path.join(assets, 'background.js'), 'ut
       return {ok:true,id:message.snapshot.id};
      }}
    }};
-   vm.createContext(sandbox);vm.runInContext(extractionSource,sandbox);vm.runInContext(backgroundSource,sandbox);
+   vm.createContext(sandbox);vm.runInContext(formsSource,sandbox);vm.runInContext(extractionSource,sandbox);vm.runInContext(backgroundSource,sandbox);
    return {call:action=>handler({action}),stats:()=>({reads,sends,ids})};
   }
   let run=await context();const first=await run.call('export');assert.equal(first.ok,true,first.error);

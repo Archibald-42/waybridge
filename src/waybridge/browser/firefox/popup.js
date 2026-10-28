@@ -9,8 +9,7 @@ async function refresh() {
   try {
     const state = await browser.runtime.sendMessage({action: "status"});
     if (!changing) toggle.checked = Boolean(state.nordic);
-    const problem = state.autoConfirm || (state.nordic &&
-      /прерван|истекло|ошиб|отозвано|не удалось|неверное|достигла|занята|повтор через/i.test(state.autoMessage || ""));
+    const problem = state.autoConfirm || (state.nordic && state.autoProblem);
     notice.hidden = !localError && !problem;
     message.textContent = localError || state.autoMessage || "";
     confirm.hidden = !state.autoConfirm;
