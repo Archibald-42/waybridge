@@ -1,16 +1,11 @@
 <!doctype html>
 <html lang="ru"><meta charset="utf-8"><title>Nordic Reader</title>
 <link rel="stylesheet" href="popup.css">
-<header><span class="mark">☾</span><div><h1>Nordic Reader</h1></div></header>
-<label class="mode"><input id="nordic" type="checkbox"><span>Nordic + автоэкспорт Forms</span></label>
-<p>Пока режим включён, сайты получают тёмное оформление, а открытые разделы Google Forms автоматически отправляются на ваш ПК: текст, ответы и полный снимок.</p>
-<div class="panel"><strong>Автоматическая отправка</strong><p id="auto-status" role="status"></p>
-<button id="auto-confirm" hidden>Отправить раздел с предупреждениями</button></div>
-<button id="export">Отправить текущую страницу вручную</button>
-<button id="retry" hidden>Повторить ручную отправку</button>
-<button id="confirm" hidden>Отправить с предупреждениями</button>
-<p id="snapshot"></p>
-<pre id="status" role="status" aria-live="polite">Проверяю состояние…</pre>
-<footer>Отключение режима отменяет автоотправку и очищает её очередь. Закрытие браузера удаляет неотправленные снимки. Независимое расширение на базе Dark Reader API (MIT).</footer>
+<header><span class="mark" aria-hidden="true">☾</span><h1>Nordic Reader</h1></header>
+<label class="mode"><span>Тема Nord</span><input id="nordic" type="checkbox" role="switch"></label>
+<div class="palette" aria-label="Палитра Nord"><i></i><i></i><i></i><i></i><i></i></div>
+<div id="notice" hidden><p id="auto-status" role="status"></p>
+<button id="auto-confirm" hidden>Отправить с предупреждениями</button></div>
+
 <script src="popup.js"></script>
 </html>
