@@ -6,6 +6,13 @@ import subprocess
 import time
 from .runtime import signals
 
+def tailscale_ready(value,cfg):
+    # Self.Online is not a reliable local-daemon readiness signal.
+    return (value.get('BackendState')=='Running'
+            and cfg.own_ip in value.get('Self',{}).get('TailscaleIPs',[])
+            and any(p.get('Online') and cfg.peer_ip in p.get('TailscaleIPs',[])
+                    for p in (value.get('Peer') or {}).values()))
+
 def battery(cfg,once=False):
     signals();previous=None;last_probe=0.0;up=False
     def active(prefix,units):
@@ -19,7 +26,7 @@ def battery(cfg,once=False):
             status=(paths[0]/'status').read_text().strip();online=False
             if not cfg.stopped.exists() and active(['systemctl'],['bridge-inbox.service','bridge-filter.service']) and active(['systemctl','--user'],['bridge-shot-queue.service','bridge-files.service']):
                 value=json.loads(subprocess.check_output(['tailscale','status','--json'],timeout=1))
-                online=value.get('Self',{}).get('Online',False) and any(p.get('Online') and cfg.peer_ip in p.get('TailscaleIPs',[]) for p in (value.get('Peer') or {}).values())
+                online=tailscale_ready(value,cfg)
             if not online:up=False;last_probe=0
             elif time.monotonic()-last_probe>=15:
                 last_probe=time.monotonic()
