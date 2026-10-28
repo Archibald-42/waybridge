@@ -10,7 +10,7 @@ const Nordic = (() => {
   function state() { return {nordic: enabled, autoMessage: message,
     queued: queue.length, autoConfirm: Boolean(queue[0]?.review)}; }
   function badge() {
-    browser.browserAction.setBadgeText({text: queue[0]?.review ? "?" : enabled ? "ON" : ""});
+    browser.browserAction.setBadgeText({text: queue[0]?.review ? "?" : ""});
     browser.browserAction.setTitle({title: `Nordic Reader: ${message}`});
   }
   function isForm(tab) {

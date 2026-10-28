@@ -79,6 +79,6 @@ browser.runtime.onMessage.addListener(async (message, sender) => {
     return {ok: false, error: status.message};
   } finally {
     busy = false;
-    browser.browserAction.setBadgeText({text: status.stage === "sent" ? "OK" : status.stage === "error" ? "!" : status.stage === "review" ? "?" : typeof Nordic !== "undefined" && Nordic.enabled ? "ON" : ""});
+    browser.browserAction.setBadgeText({text: status.stage === "sent" ? "OK" : status.stage === "error" ? "!" : status.stage === "review" ? "?" : ""});
   }
 });
