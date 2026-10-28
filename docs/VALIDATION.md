@@ -120,3 +120,13 @@ check: 8 questions and 27 options were recognized. Assets were blocked in that
 static reproduction, so it is not evidence of complete live rendering. No form
 submission was performed. User-profile activation still needs Firefox's temporary
 extension reload and should be checked against the live form after that reload.
+
+
+Follow-up reliability checks: reloading the same legacy section twice now produces
+two fresh snapshot IDs, both with native ACKs in the real local Firefox test.
+Same-visit retries still deduplicate; A -> B -> A is exercised in the rendered
+content-controller test. Scrolling no longer invalidates capture solely because
+scrollX/scrollY changed. Pending images receive a bounded loading grace period.
+The supplied live form was also received on the paired PC after user reload:
+8 questions, 27 options, one complete PNG tile, no warnings/unloaded images;
+the HTML was nonempty and its page-opener request was recorded.

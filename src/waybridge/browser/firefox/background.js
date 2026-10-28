@@ -39,7 +39,12 @@ async function capture(tabId = null, cancelled = () => false, progress = message
   }
   if (cancelled()) throw new Error("Автоэкспорт отключён.");
   const after = await extract(selected.id);
-  if (JSON.stringify(before) !== JSON.stringify(after)) throw new Error("Страница изменилась во время экспорта. Повторите после завершения изменений.");
+  const stable = document => {
+    const value = structuredClone(document);
+    delete value.page.geometry.scrollX; delete value.page.geometry.scrollY;
+    return JSON.stringify(value);
+  };
+  if (stable(before) !== stable(after)) throw new Error("Страница изменилась во время экспорта. Повторите после завершения изменений.");
   const snapshot = {format: "waybridge-page/1", id: crypto.randomUUID().replaceAll("-", ""),
     created_at: new Date().toISOString(), scope: "current-section", ...before, tiles};
   if (new TextEncoder().encode(JSON.stringify(snapshot)).length > LIMIT) throw new Error("Снимок превышает 32 МиБ вместе с текстом.");

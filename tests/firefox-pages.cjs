@@ -11,9 +11,11 @@ const root=path.resolve(__dirname,'..');
  const automatic=process.env.WAYBRIDGE_FIREFOX_AUTO==='1';
  const original=fs.readFileSync(path.join(__dirname,'fixtures/form.html'),'utf8');
  const fixture=automatic ? original.replaceAll('<fieldset>','<div class="ss-form-question">').replaceAll('</fieldset>','</div>').replaceAll('<legend>','<div class="ss-q-title">').replaceAll('</legend>','</div>') : original;
+ const reports=[];
  let reportResolve;const reported=new Promise(resolve=>{reportResolve=resolve;});
  const server=http.createServer((req,res)=>{
-  if(req.url==='/__report'){let body='';req.on('data',c=>{body+=c;});req.on('end',()=>{res.end('ok');reportResolve(JSON.parse(body));});return;}
+  if(req.url==='/__report'){let body='';req.on('data',c=>{body+=c;});req.on('end',()=>{res.end('ok');const data=JSON.parse(body);reports.push(data);
+   if(!automatic||data.error||reports.length>=2)reportResolve({...data,previous:reports[0]?.bundle?.id});});return;}
   res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});res.end(fixture);
  });
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
@@ -21,6 +23,7 @@ const root=path.resolve(__dirname,'..');
  for(const name of fs.readdirSync(path.join(root,'src/waybridge/browser/firefox')))fs.copyFileSync(path.join(root,'src/waybridge/browser/firefox',name),path.join(ext,name));
  const manifest=JSON.parse(fs.readFileSync(path.join(ext,'manifest.json')));
  manifest.permissions.push('<all_urls>');manifest.optional_permissions=[];
+ manifest.background.scripts.push('integration.js');
  fs.writeFileSync(path.join(ext,'manifest.json'),JSON.stringify(manifest));
  const profile=path.join(folder,'profile');fs.mkdirSync(profile);
  fs.writeFileSync(path.join(profile,'user.js'),'user_pref("remote.experimental.enabled", true);\n');
@@ -54,7 +57,8 @@ const root=path.resolve(__dirname,'..');
    const controller=path.join(ext,'nordic.js');
    let code=fs.readFileSync(controller,'utf8');
    if(process.env.WAYBRIDGE_TEST_NATIVE!=='1')code=code.replace('const ack = await native(item.snapshot);','const ack = {ok:true,id:item.snapshot.id};');
-   code=code.replace('queue.shift(); delivered.add(item.key);',`await fetch(${JSON.stringify(reportURL)},{method:'POST',body:JSON.stringify({bundle:item.snapshot,ack,automatic:true})});\n      queue.shift(); delivered.add(item.key);`);
+   code=code.replace('queue.shift(); delivered.add(item.key);',`await fetch(${JSON.stringify(reportURL)},{method:'POST',body:JSON.stringify({bundle:item.snapshot,ack,automatic:true})});\n      queue.shift(); delivered.add(item.key);
+      if(!globalThis.__fixtureRevisited){globalThis.__fixtureRevisited=true;setTimeout(async()=>{const [tab]=await browser.tabs.query({active:true,currentWindow:true});await browser.tabs.reload(tab.id);},300);}`);
    fs.writeFileSync(controller,code);
   }
   const integration=automatic ? `
@@ -78,7 +82,7 @@ const root=path.resolve(__dirname,'..');
     await fetch(${JSON.stringify(reportURL)},{method:'POST',body:JSON.stringify({bundle,ack})});
    }catch(error){await fetch(${JSON.stringify(reportURL)},{method:'POST',body:JSON.stringify({error:error.message,stack:error.stack})});}
   })();`;
-  fs.appendFileSync(path.join(ext,'background.js'),`\nsetTimeout(()=>{${integration}},0);`);
+  fs.writeFileSync(path.join(ext,'integration.js'),integration);
   console.log('INSTALL',JSON.stringify(await command('webExtension.install',{extensionData:{type:'path',path:ext}})));
   let reportTimer;const result=await Promise.race([reported,new Promise((_,reject)=>{reportTimer=setTimeout(()=>reject(new Error('Firefox capture timed out')),25000);})]);clearTimeout(reportTimer);
   assert(!result.error,JSON.stringify(result));
@@ -86,7 +90,7 @@ const root=path.resolve(__dirname,'..');
   if(process.env.WAYBRIDGE_FIREFOX_FIXTURE)fs.writeFileSync(process.env.WAYBRIDGE_FIREFOX_FIXTURE,JSON.stringify(bundle));
   assert(bundle.tiles.length>=2);assert(bundle.page.questions[0].options[0].label==='Третий вариант');
   if(automatic){
-   assert(result.automatic);assert.equal(bundle.page.url,new URL(automaticURL).origin+'/forms/d/fixture_legacy/viewform');
+   assert(result.automatic);assert.notEqual(result.previous,bundle.id,'Reopening the same section must deliver a fresh snapshot');assert.equal(bundle.page.url,new URL(automaticURL).origin+'/forms/d/fixture_legacy/viewform');
    assert(!JSON.stringify(bundle).includes('notExported=secret'));
    console.log('FIREFOX_AUTOMATIC_LEGACY_SECTION_PASSED',bundle.page.questions.length);
   }else console.log('FIREFOX_NORDIC_LIFECYCLE_PASSED');

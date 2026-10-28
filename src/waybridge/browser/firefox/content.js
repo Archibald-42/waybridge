@@ -1,16 +1,17 @@
 /* One controller per document, including repeated tab activations. */
 (() => {
-  if (globalThis.WaybridgeNordic?.version === 3) return;
+  if (globalThis.WaybridgeNordic?.version === 4) return;
   if (globalThis.WaybridgeNordic) void globalThis.WaybridgeNordic.set(false);
   let enabled = false, timer = null, inFlight = false, lastKey = null, scheduledAt = 0;
+  let visit = crypto.randomUUID(), observedKey = null;
   const form = () => Boolean(WaybridgeFormURL(location.href));
-  function schedule(delay = 1400) {
+  function schedule(delay = 350) {
     clearTimeout(timer);
     if (enabled && form() && !document.hidden) {
       const now = Date.now();
-      if (delay === 1400) {
+      if (delay === 350) {
         if (!scheduledAt) scheduledAt = now;
-        delay = Math.min(delay, Math.max(0, 5000 - (now - scheduledAt)));
+        delay = Math.min(delay, Math.max(0, 2000 - (now - scheduledAt)));
       } else scheduledAt = 0;
       timer = setTimeout(check, delay);
     }
@@ -22,10 +23,14 @@
     inFlight = true;
     try {
       const key = WaybridgeSectionKey(WaybridgeExtract());
+      if (key !== observedKey) {
+        observedKey = key; visit = crypto.randomUUID(); lastKey = null;
+      }
       if (key === lastKey) return;
-      const result = await browser.runtime.sendMessage({action: "section", key});
-      if (enabled && result?.accepted) lastKey = key;
-      else if (enabled) schedule(result?.retryAfter || 5000);
+      const currentVisit = visit;
+      const result = await browser.runtime.sendMessage({action: "section", key, visit});
+      if (enabled && visit === currentVisit && result?.delivered) lastKey = key;
+      else if (enabled) schedule(result?.retryAfter || (result?.accepted ? 1000 : 3000));
     } catch (_) { schedule(5000); }
     finally { inFlight = false; }
   }
@@ -53,8 +58,11 @@
       schedule();
     } else DarkReader.disable();
   }
-  globalThis.WaybridgeNordic = {version: 3, set};
-  document.addEventListener("visibilitychange", () => schedule());
+  globalThis.WaybridgeNordic = {version: 4, set};
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) { visit = crypto.randomUUID(); lastKey = null; }
+    schedule();
+  });
   document.addEventListener("load", () => schedule(), true);
   document.addEventListener("error", () => schedule(), true);
 })();

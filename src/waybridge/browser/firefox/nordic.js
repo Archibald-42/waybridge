@@ -3,6 +3,7 @@ const Nordic = (() => {
   let enabled = false, generation = 0, capturing = false, sending = false;
   let queue = [], delivered = new Set(), timer = null, port = null;
   const applying = new Map();
+  const imageWait = new Map();
   let problem = false;
   let message = "Nordic и автоэкспорт выключены.";
   const ready = browser.storage.local.get("nordicEnabled").then(value => {
@@ -28,7 +29,7 @@ const Nordic = (() => {
     try {
       const tab = await browser.tabs.get(tabId);
       if (tab.incognito || !/^https?:\/\//.test(tab.url || "")) return;
-      const exists = await browser.tabs.executeScript(tabId, {code: "globalThis.WaybridgeNordic?.version === 3"});
+      const exists = await browser.tabs.executeScript(tabId, {code: "globalThis.WaybridgeNordic?.version === 4"});
       if (!exists[0]) {
         if (!enabled || token !== generation) return;
         await browser.tabs.executeScript(tabId, {code: "globalThis.WaybridgeNordic?.set(false); true"});
@@ -89,10 +90,13 @@ const Nordic = (() => {
       if (enabled) { badge(); timer = setTimeout(drain, queue[0] === item ? 15000 : 0); }
     }
   }
-  async function section(key, sender) {
+  async function section(key, sender, visit) {
     if (!enabled || !isForm(sender.tab) || !sender.tab.active) return {accepted: false};
     if (typeof key !== "string" || key.length > 1000000) return {accepted: false};
-    if (delivered.has(key) || queue.some(item => item.key === key)) return {accepted: true};
+    const session = typeof visit === "string" && /^[A-Za-z0-9_-]{1,96}$/.test(visit) ? visit : String(sender.documentId || sender.tab.id);
+    const identity = session + ":" + key;
+    if (delivered.has(identity)) return {accepted: true, delivered: true};
+    if (queue.some(item => item.key === identity)) return {accepted: true, delivered: false};
     const bytes = queue.reduce((sum, item) => sum + item.bytes, 0);
     if (busy || capturing || queue.length >= 3 || bytes > 32 * 1024 * 1024) {
       problem = true; message = "Очередь занята. Дождитесь сохранения разделов на ПК."; badge();
@@ -106,10 +110,20 @@ const Nordic = (() => {
       if (WaybridgeSectionKey(snapshot) !== key) return {accepted: false, retryAfter: 1800};
       const size = new TextEncoder().encode(JSON.stringify(snapshot)).length;
       if (bytes + size > 64 * 1024 * 1024) throw new Error("Очередь достигла 64 МиБ.");
-      queue.push({key, snapshot, bytes: size, review: snapshot.warnings.length > 0});
+      if (snapshot.page.images.some(image => !image.loaded)) {
+        const started = imageWait.get(identity) || Date.now();
+        imageWait.set(identity, started);
+        if (imageWait.size > 8) imageWait.delete(imageWait.keys().next().value);
+        if (Date.now() - started < 10000) {
+          problem = false; message = "Ожидаю загрузки изображений…"; badge();
+          return {accepted: false, retryAfter: 1000};
+        }
+      }
+      imageWait.delete(identity);
+      queue.push({key: identity, snapshot, bytes: size, review: snapshot.warnings.length > 0});
       if (queue[0].review) { problem = true; message = "Нужно подтверждение: " + queue[0].snapshot.warnings.join(" "); }
       badge(); void drain();
-      return {accepted: true};
+      return {accepted: true, delivered: false};
     } catch (error) {
       if (token === generation) { problem = true; message = error.message; badge(); }
       return {accepted: false, retryAfter: 5000};
@@ -117,7 +131,7 @@ const Nordic = (() => {
   }
   async function handle(request, sender) {
     await ready;
-    if (request.action === "section") return section(request.key, sender);
+    if (request.action === "section") return section(request.key, sender, request.visit);
     if (request.action === "nordic-confirm") {
       if (queue[0]) queue[0].review = false;
       void drain(); return {ok: true};
@@ -129,7 +143,7 @@ const Nordic = (() => {
     // Persist before changing live state, so a failed write cannot claim success.
     await browser.storage.local.set({nordicEnabled: value});
     enabled = value; problem = false; generation++; clearTimeout(timer);
-    queue = []; delivered.clear();
+    queue = []; delivered.clear(); imageWait.clear();
     if (port) port.disconnect();
     message = enabled ? "Nordic включён. Активные разделы Google Forms отправляются на ПК." : "Nordic выключен. Очередь автоматической отправки очищена.";
     badge(); await applyAll(); return {ok: true};

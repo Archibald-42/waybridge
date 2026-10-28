@@ -36,14 +36,15 @@ const backgroundSource = fs.readFileSync(path.join(assets, 'background.js'), 'ut
   console.log('PASS real DOM: shuffled order, current values, offscreen text, password/hidden exclusions');
 
   let savedSnapshot;
-  async function context({failOnce=false,mutate=false,warn=false,permission=true}={}) {
+  async function context({failOnce=false,mutate=false,warn=false,permission=true,scrollOnly=false}={}) {
    let handler;let reads=0;let sends=0;let ids=[];
-   const sandbox={crypto:webcrypto,TextEncoder,URL,console,browser:{
+   const sandbox={crypto:webcrypto,TextEncoder,URL,structuredClone,console,browser:{
     browserAction:{setBadgeText:()=>{},setTitle:()=>{}},
     permissions:{contains:async()=>permission},
     tabs:{query:async()=>[{id:1,url:page.url()}],executeScript:async()=>{
       const value=await extract();reads++;
       if(mutate&&reads>1)value.page.text+='CHANGED';
+      if(scrollOnly&&reads>1)value.page.geometry.scrollY+=100;
       if(warn)value.warnings.push('Test warning: incomplete image');
       return [value];
      },captureTab:async(id,options)=>{
@@ -68,6 +69,8 @@ const backgroundSource = fs.readFileSync(path.join(assets, 'background.js'), 'ut
   assert.equal((await run.call('retry')).ok,true);assert.equal(run.stats().sends,2);
   assert.equal(run.stats().ids[0],run.stats().ids[1]);
   console.log('PASS retry retains same immutable snapshot ID');
+  run=await context({scrollOnly:true});assert.equal((await run.call('export')).ok,true);assert.equal(run.stats().sends,1);
+  console.log('PASS scrolling during capture does not cancel a document-coordinate snapshot');
   run=await context({mutate:true});assert.equal((await run.call('export')).ok,false);assert.equal(run.stats().sends,0);
   console.log('PASS document changed during capture: no transmission');
   run=await context({warn:true});assert.equal((await run.call('export')).ok,true);assert.equal(run.stats().sends,0);

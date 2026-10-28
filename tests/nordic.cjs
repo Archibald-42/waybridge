@@ -66,6 +66,21 @@ async function controller() {
  run.set({...snapshot('legacy'), page:{...snapshot('legacy').page,url:'https://docs.google.com/forms/d/fixture_1/viewform'}});
  assert.equal((await run.control.handle({action:'section',key:run.key()},{tab:{...formTab,url:legacyURL}})).accepted,true);
  await run.flush();assert.deepEqual(run.sends,['legacy']);
+ const again=await controller();
+ assert.equal((await again.control.handle({action:'section',key:again.key(),visit:'first-visit'},{tab:formTab})).delivered,false);
+ await again.flush();
+ assert.equal((await again.control.handle({action:'section',key:again.key(),visit:'first-visit'},{tab:formTab})).delivered,true);
+ assert.equal((await again.control.handle({action:'section',key:again.key(),visit:'second-visit'},{tab:formTab})).accepted,true);
+ await again.flush();assert.equal(again.sends.length,2);
+ const images=await controller();
+ const incomplete=snapshot('image-loading');incomplete.page.images=[{alt:'Loading',loaded:false}];incomplete.warnings=['Image loading'];images.set(incomplete);
+ assert.equal((await images.control.handle({action:'section',key:images.key(),visit:'image-visit'},{tab:formTab})).accepted,false);
+ assert.equal(images.control.state().queued,0);assert.equal(images.control.state().autoConfirm,false);
+ incomplete.page.images[0].loaded=true;incomplete.warnings=[];images.set(incomplete);
+ assert.equal((await images.control.handle({action:'section',key:images.key(),visit:'image-visit'},{tab:formTab})).accepted,true);
+ await images.flush();assert.equal(images.sends.length,1);
+ console.log('PASS image loading retries before adding a partial snapshot to the queue');
+ console.log('PASS each new visit is delivered; same-visit retries reuse the queued snapshot');
  console.log('PASS legacy sender reaches the acknowledged auto queue');
  console.log('PASS auto queue: domain restriction, dedup, same-ID retry, warning review, cancellation');
  const browser=await chromium.launch({headless:true});
@@ -73,7 +88,7 @@ async function controller() {
   const page=await browser.newPage();
   await page.route('https://docs.google.com/**', route=>route.fulfill({contentType:'text/html',body:fs.readFileSync(path.join(__dirname,'fixtures/form.html'),'utf8').replaceAll('<fieldset>', '<div class="ss-form-question">').replaceAll('</fieldset>','</div>').replaceAll('<legend>','<div class="ss-q-title">').replaceAll('</legend>','</div>')}));
   await page.goto(legacyURL);
-  await page.evaluate(() => {window.reports=[];window.browser={runtime:{sendMessage:async m=>{window.reports.push(m);return {accepted:true};}}};});
+  await page.evaluate(() => {window.reports=[];window.browser={runtime:{sendMessage:async m=>{window.reports.push(m);return {accepted:true,delivered:true};}}};});
   await page.evaluate(() => {window.previousDisabled=false;window.WaybridgeNordic={set: value => {if(value===false)window.previousDisabled=true;}};});
   for(const name of ['forms.js','darkreader.js','extract.js','section-key.js','content.js'])await page.addScriptTag({content:source(name)});
   assert(await page.evaluate(() => window.previousDisabled));
@@ -86,10 +101,14 @@ async function controller() {
   await page.waitForTimeout(1700);assert.equal(await page.evaluate(() => window.reports.length),1);
   await page.evaluate(() => {document.querySelector('[role="heading"],legend,h2,h3,.ss-q-title').textContent='NEW SECTION';});
   await page.waitForFunction(() => window.reports.length===2);
+  await page.evaluate(() => {document.querySelector('[role="heading"],legend,h2,h3,.ss-q-title').textContent='Вопрос B раньше вопроса A';});
+  await page.waitForFunction(() => window.reports.length===3);
+  const visits=await page.evaluate(() => window.reports.map(message=>message.visit));
+  assert.equal(new Set(visits).size,3,'A -> B -> A must start three separate deliveries');
   await page.evaluate(() => WaybridgeNordic.set(false));
   assert.equal(await page.evaluate(() => DarkReader.isEnabled()),false);
   await page.evaluate(() => {document.querySelector('[role="heading"],legend,h2,h3,.ss-q-title').textContent='AFTER DISABLE';});
-  await page.waitForTimeout(1700);assert.equal(await page.evaluate(() => window.reports.length),2);
+  await page.waitForTimeout(1700);assert.equal(await page.evaluate(() => window.reports.length),3);
   console.log('PASS real DOM: Nordic palette, section observer, answer dedup, disable restores page and stops export');
  } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});
