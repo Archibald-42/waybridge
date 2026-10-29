@@ -26,7 +26,7 @@ class ReadinessTests(unittest.TestCase):
             c=cfg(Path(td));c.state.mkdir()
             with patch('waybridge.control.preflight',side_effect=RuntimeError('no permission')),patch('waybridge.control.stop') as rollback,patch('waybridge.control.root_unit') as root:
                 with self.assertRaisesRegex(RuntimeError,'permission'):start(c)
-            root.assert_not_called();rollback.assert_called_once();self.assertTrue(c.stopped.exists())
+            root.assert_not_called();rollback.assert_not_called();self.assertFalse(c.stopped.exists())
     def test_root_stop_is_attempted_even_if_user_manager_fails(self):
         with tempfile.TemporaryDirectory() as td:
             c=cfg(Path(td));c.state.mkdir()

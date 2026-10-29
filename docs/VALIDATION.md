@@ -130,3 +130,22 @@ scrollX/scrollY changed. Pending images receive a bounded loading grace period.
 The supplied live form was also received on the paired PC after user reload:
 8 questions, 27 options, one complete PNG tile, no warnings/unloaded images;
 the HTML was nonempty and its page-opener request was recorded.
+
+
+# Stable 3.6.1 · 2026-10-29
+
+80 Python regression tests pass locally on Python 3.14. They include restart
+without overwriting local project edits, replay of completed delivery metadata,
+journal failure without a success receipt, explicit stop-marker preservation,
+peer-key changes rejected in skip-root mode, bounded/strict JSON, receiver memory
+limits and scoped removal of owned service drop-ins. Existing outage, ACK,
+retention, gallery recovery, pairing and repeatable bootstrap tests remain in place.
+
+Real Chromium DOM/capture orchestration and Nordic lifecycle tests pass. Firefox
+Developer Edition 160 passes both isolated-profile capture and automatic legacy
+section tests. The fixtures contain no user form data. Python compile checks,
+shell syntax and reproducible source archive checks pass.
+
+These are regression results, not a guarantee against every failure or an audit
+certification. Clean installation and live pair verification are deployment steps
+performed separately after the release commit is pushed.

@@ -34,5 +34,11 @@ and current entered values. Private tabs are rejected. Query/fragment, cookies,
 localStorage and HTTP headers are not collected. Pending snapshots remain in
 extension RAM for retry; stopping the transport does not clear that browser RAM.
 Snapshots on the receiving PC are retained locally (last ten) and preserved on
-uninstall. Removing the native application does not uninstall a separately signed
+uninstall. Removing the native application does not uninstall a separately installed
 Firefox add-on; remove it through Firefox's Add-ons Manager when appropriate.
+
+Dedicated SSH receive/native-host child processes lower their address-space limit
+to at most 768 MiB; stricter existing limits are retained. JSON protocol documents
+reject duplicate keys, non-finite constants and nesting beyond 64 levels. These
+limits bound individual child processes, not aggregate connections or disk usage.
+The paired peer remains trusted to upload files and snapshots within those limits.

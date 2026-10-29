@@ -4,6 +4,7 @@ import json
 import re
 import struct
 import zlib
+from .runtime import decode_json
 
 LIMIT=32*1024*1024
 MAGIC=b'WB1 '
@@ -43,7 +44,7 @@ def parse(stream,first=None,*,magic=MAGIC,validator=validate_png):
         return None,data
     line=stream.readline(1025)
     if len(line)>1024 or not line.endswith(b'\n'):raise ValueError('header too long')
-    header=json.loads(line)
+    header=decode_json(line)
     if not isinstance(header,dict) or set(header)!={'id','sha256','size'}:raise ValueError('header fields must be id, sha256, size')
     if not isinstance(header.get('id'),str) or not isinstance(header.get('sha256'),str):raise ValueError('id and hash must be strings')
     if not re.fullmatch('[a-f0-9]{32}',header.get('id','')):raise ValueError('bad job id')
@@ -57,6 +58,6 @@ def parse(stream,first=None,*,magic=MAGIC,validator=validate_png):
     return header,data
 
 def verify_ack(data,header):
-    try:ack=json.loads(data)
+    try:ack=decode_json(data)
     except (ValueError,UnicodeError):return False
     return isinstance(ack,dict) and ack.get('ok') is True and all(ack.get(k)==header[k] for k in ('id','sha256','size'))

@@ -12,7 +12,7 @@ import struct
 import subprocess
 import time
 from .protocol import LIMIT,frame,parse,validate_png,verify_ack
-from .runtime import atomic,signals
+from .runtime import atomic,signals,decode_json,receive_limits
 
 MAGIC=b'WBP1'
 EXTENSION_ID='page-export@waybridge.local'
@@ -37,7 +37,7 @@ def mapping(value,keys):
 
 def validate(data):
     if not 0<len(data)<=LIMIT:raise ValueError('page snapshot exceeds 32 MiB')
-    doc=json.loads(data)
+    doc=decode_json(data)
     mapping(doc,'format id created_at scope page tiles warnings')
     if doc['format']!='waybridge-page/1' or doc['scope']!='current-section':raise ValueError('unsupported snapshot format/scope')
     if not isinstance(doc['id'],str) or not re.fullmatch('[a-f0-9]{32}',doc['id']):raise ValueError('invalid snapshot id')
@@ -118,7 +118,7 @@ def render(doc):
 def receive(cfg,stream,first):
     header,data=parse(stream,first,magic=MAGIC,validator=validate)
     if header is None:raise ValueError('page frame required')
-    doc=json.loads(data)
+    doc=decode_json(data)
     if doc['id']!=header['id']:raise ValueError('snapshot id does not match envelope')
     folder=cfg.state/'pages';folder.mkdir(parents=True,exist_ok=True,mode=0o700)
     identifier=header['id'];target=folder/(identifier+'.json')
@@ -178,12 +178,14 @@ def read_exact(stream,size):
 
 def native(cfg,source=None,destination=None):
     import sys
-    if source is None:signals()  # Firefox disconnect cancels SSH through send() finally.
+    if source is None:
+        receive_limits()
+        signals()  # Firefox disconnect cancels SSH through send() finally.
     source=source or sys.stdin.buffer;destination=destination or sys.stdout.buffer
     try:
         size=struct.unpack('=I',read_exact(source,4))[0]
         if not 0<size<=LIMIT+1024:raise ValueError('native message exceeds limit')
-        request=json.loads(read_exact(source,size))
+        request=decode_json(read_exact(source,size))
         if not isinstance(request,dict) or set(request)!={'action','snapshot'} or request['action']!='send':raise ValueError('unsupported native action')
         result=send(cfg,request['snapshot'])
     except (OSError,ValueError,RuntimeError,subprocess.SubprocessError) as error:result={'ok':False,'error':str(error)[:1200]}

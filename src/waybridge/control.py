@@ -75,12 +75,14 @@ def stop(cfg):
     if errors:raise RuntimeError('; '.join(errors))
 
 def start(cfg):
+    # Read-only checks must not turn a temporary missing desktop/network into a
+    # persistent user stop request or discard an already working RAM queue.
+    preflight(cfg)
+    if run(['systemctl','is-active','bridge-filter.service'],check=False).stdout.strip()!='active':
+        raise RuntimeError('bridge-filter.service is not active; refusing to open transport')
     cfg.stopped.touch()
     user_units,root_units=units(cfg)
     try:
-        preflight(cfg)
-        if run(['systemctl','is-active','bridge-filter.service'],check=False).stdout.strip()!='active':
-            raise RuntimeError('bridge-filter.service is not active; refusing to open transport')
         for unit in reversed(root_units):root_unit('start',unit)
         run(['systemctl','--user','reset-failed',*user_units],check=False)
         run(['systemctl','--user','start',*user_units])

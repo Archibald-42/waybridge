@@ -121,6 +121,31 @@ def watch(folder):
         if 'Watches established.' in line:return child
     child.wait();raise RuntimeError('inotify watch failed')
 
+
+def handled_signature(cfg,name):
+    """Durable source identity: a restart must not replay old inbox over local edits."""
+    path=cfg.state/'file-state'/(name+'.json')
+    try:
+        with path.open('rb') as stream:raw=stream.read(1025)
+        if len(raw)>1024:return None
+        value=json.loads(raw)
+        signature=value.get('signature') if isinstance(value,dict) else None
+        if isinstance(signature,list) and len(signature)==4 and all(type(v) is int for v in signature):return tuple(signature)
+    except (OSError,ValueError):pass
+    return None
+
+def remember_file(cfg,name,signature,digest):
+    if signature is None:raise ValueError('incoming file disappeared during publication')
+    atomic(cfg.state/'file-state'/(name+'.json'),json.dumps({'signature':signature,'sha256':digest}).encode())
+
+def completed_receipt(cfg,value):
+    try:
+        with (cfg.inbox/'.receipts'/(value['id']+'.json')).open('rb') as stream:raw=stream.read(1025)
+        if len(raw)>1024:return False
+        stored=json.loads(raw)
+        return isinstance(stored,dict) and stored.get('ok') is True and all(stored.get(k)==value[k] for k in ('id','name','sha256'))
+    except (OSError,ValueError):return False
+
 def publish(cfg,name,identifier=None,expected=None):
     if not NAME.fullmatch(name):return False
     source=cfg.inbox/name
@@ -128,12 +153,19 @@ def publish(cfg,name,identifier=None,expected=None):
     try:
         fd=os.open(source,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
         with os.fdopen(fd,'rb') as f:
-            if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):return False
+            info=os.fstat(f.fileno())
+            if not stat.S_ISREG(info.st_mode):return False
+            signature=(info.st_ino,info.st_size,info.st_mtime_ns,info.st_ctime_ns)
             data=f.read(LIMIT+1)
+            final=os.fstat(f.fileno())
+            if signature!=(final.st_ino,final.st_size,final.st_mtime_ns,final.st_ctime_ns):raise ValueError('incoming file changed while reading')
     except OSError:return False
     if len(data)>LIMIT:return False
     digest=hashlib.sha256(data).hexdigest()
     if expected is not None and digest!=expected:raise ValueError('содержимое входящего файла не соответствует заявке')
+    if signature is not None and handled_signature(cfg,name)==signature:
+        if identifier:receipt(cfg,identifier,{'ok':True,'name':name,'size':len(data),'sha256':digest})
+        return True
     target=cfg.projects/name
     if target.is_file() and not target.is_symlink():
         with target.open('rb') as f:old=f.read(LIMIT+1)
@@ -143,6 +175,7 @@ def publish(cfg,name,identifier=None,expected=None):
             atomic(cfg.state/'versions'/(name+'.'+previous_digest),old)
             atomic(target,data)
     else:atomic(target,data)
+    remember_file(cfg,name,signature,digest)
     if identifier:receipt(cfg,identifier,{'ok':True,'name':name,'size':len(data),'sha256':digest})
     return True
 
@@ -167,6 +200,9 @@ def publish_safely(cfg,name):
         if not (cfg.inbox/name).exists():return False
         value=delivery(cfg,name)
         if value:
+            if completed_receipt(cfg,value):
+                (cfg.inbox/name).unlink(missing_ok=True)
+                return True
             result=publish(cfg,value['name'],value['id'],value['sha256'])
             if not result:raise ValueError('входящий файл недоступен или отклонён')
             (cfg.inbox/name).unlink(missing_ok=True)
@@ -210,7 +246,7 @@ def reconcile(cfg,seen):
         if signature is None:continue
         current[path.name]=signature
         # Failed transactions stay eligible, so repairing a destination needs no re-upload.
-        if seen.get(path.name)!=signature:
+        if seen.get(path.name)!=signature and (DELIVERY.fullmatch(path.name) or handled_signature(cfg,path.name)!=signature):
             if not publish_safely(cfg,path.name):current.pop(path.name,None)
     return current
 

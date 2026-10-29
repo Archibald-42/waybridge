@@ -65,8 +65,14 @@ def apply(own,peer,config,old,skip_root=False,integrate=True,start=True):
     from .install import root_plan,user_install,link
     from .control import execute
     previous=tomllib.loads(config.read_text()) if config.exists() else {}
-    if skip_root and old and (old.role!=own['role'] or old.peer_ip!=peer['ip']):
-        raise ValueError('--skip-root cannot change role or peer; update the system restriction too')
+    if skip_root:
+        if old is None:raise ValueError('--skip-root requires an existing installation')
+        if old.role!=own['role'] or old.peer_ip!=peer['ip'] or old.user!=own['user'] or (old.role=='client' and old.server_user!=peer['user']):
+            raise ValueError('--skip-root cannot change role, peer or account; update the system restriction too')
+        for filename,key in [('peer-auth.pub','auth_key'),('peer-host.pub','host_key')]:
+            path=config.parent/filename
+            if not path.exists() or path.read_text().strip()!=peer[key].strip():
+                raise ValueError('--skip-root cannot change peer keys; apply the full system plan')
     if not skip_root:run(['sudo','-v'])
     # Stop workers before replacing their configuration.
     if old:

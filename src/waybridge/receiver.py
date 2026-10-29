@@ -7,9 +7,10 @@ import signal
 import sys
 import uuid
 from .protocol import parse
-from .runtime import atomic
+from .runtime import atomic,receive_limits
 
 def receive(cfg,stream=None):
+    if stream is None:receive_limits()
     os.umask(0o077);signal.alarm(25)
     try:
         source=stream or sys.stdin.buffer;first=source.read(4)

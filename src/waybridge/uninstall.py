@@ -17,11 +17,17 @@ def system_script(user,uid):
     return '''#!/bin/bash
 set -Eeuo pipefail
 [[ $EUID == 0 ]] || exit 1
-target_user='''+q(user)+'\n'+legacy_root_cleanup(uid)+'''
+target_user='''+q(user)+'\n'+'''# Validate ownership before deleting service configuration or credentials.
+if getent passwd bridge >/dev/null; then
+ entry=$(getent passwd bridge)
+ [[ $(cut -d: -f6 <<<"$entry") == /inbox && $(cut -d: -f7 <<<"$entry") == /usr/bin/nologin ]] || { echo 'Unexpected bridge account; preserving it'; exit 1; }
+fi
+'''+legacy_root_cleanup(uid)+'''
 for name in bridge-inbox bridge-shot bridge-filter; do
  systemctl stop "$name.service" 2>/dev/null || true
  systemctl disable "$name.service" 2>/dev/null || true
  rm -f "/etc/systemd/system/$name.service"
+ rm -rf "/etc/systemd/system/$name.service.d"
 done
 if nft list table inet bridge_guard >/dev/null 2>&1; then nft delete table inet bridge_guard; fi
 rm -f /etc/polkit-1/rules.d/49-bridge-units.rules
@@ -55,7 +61,7 @@ def run(cfg,yes=False,authorizer='sudo'):
     preserved=home/'.local/state/waybridge-preserved'/str(time.time_ns())
     for source,name in ((cfg.inbox,'inbox'),(cfg.state/'shots','shots'),(cfg.state/'versions','versions'),(cfg.state/'pages','pages')):
         if source.exists() and any(source.iterdir()):
-            preserved.mkdir(parents=True,exist_ok=True)
+            preserved.mkdir(parents=True,exist_ok=True,mode=0o700)
             shutil.copytree(source,preserved/name,symlinks=True)
     script=system_script(user,uid)
     with tempfile.TemporaryDirectory(prefix='waybridge-uninstall-') as td:
@@ -77,7 +83,11 @@ def run(cfg,yes=False,authorizer='sudo'):
             item.setdefault('battery',{'format':'{capacity}%'})
         write(bar,json.dumps(data,ensure_ascii=False,indent=2)+'\n')
     reload_panel()
-    for name in USER_UNITS:(home/'.config/systemd/user'/(name+'.service')).unlink(missing_ok=True)
+    for name in USER_UNITS:
+        (home/'.config/systemd/user'/(name+'.service')).unlink(missing_ok=True)
+        dropin=home/'.config/systemd/user'/(name+'.service.d')
+        if dropin.is_symlink():dropin.unlink()
+        elif dropin.is_dir():shutil.rmtree(dropin)
     from .pages import HOST_NAME
     for folder in (home/'.mozilla/native-messaging-hosts',home/'.config/mozilla/native-messaging-hosts'):(folder/(HOST_NAME+'.json')).unlink(missing_ok=True)
     (home/'.local/libexec/waybridge-page-native').unlink(missing_ok=True)

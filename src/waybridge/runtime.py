@@ -71,3 +71,37 @@ def listener(path):
     s=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
     s.bind(str(path));path.chmod(0o600);s.listen(16);s.settimeout(.5)
     return s
+
+
+def decode_json(data):
+    """Reject ambiguous/non-finite JSON and turn excessive depth into a protocol error."""
+    text=data.decode('utf-8') if isinstance(data,(bytes,bytearray)) else data
+    depth=0;quoted=False;escaped=False
+    for char in text:
+        if quoted:
+            if escaped:escaped=False
+            elif char=='\\':escaped=True
+            elif char=='"':quoted=False
+        elif char=='"':quoted=True
+        elif char in '[{':
+            depth+=1
+            if depth>64:raise ValueError('JSON nesting limit exceeded')
+        elif char in ']}':depth-=1
+    def pairs(values):
+        result={}
+        for key,value in values:
+            if key in result:raise ValueError('duplicate JSON field')
+            result[key]=value
+        return result
+    def constant(value):raise ValueError('non-finite JSON value')
+    try:return json.loads(data,object_pairs_hook=pairs,parse_constant=constant)
+    except (RecursionError,MemoryError) as error:raise ValueError('JSON nesting or resource limit exceeded') from error
+
+def receive_limits():
+    """Bound only a dedicated native/SSH child, never the desktop or sshd parent."""
+    import resource
+    ceiling=768*1024*1024
+    soft,hard=resource.getrlimit(resource.RLIMIT_AS)
+    if soft!=resource.RLIM_INFINITY:ceiling=min(ceiling,soft)
+    if hard!=resource.RLIM_INFINITY:ceiling=min(ceiling,hard)
+    resource.setrlimit(resource.RLIMIT_AS,(ceiling,hard))
