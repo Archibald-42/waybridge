@@ -87,3 +87,20 @@ class UninstallTests(unittest.TestCase):
         self.assertLess(script.index('Unexpected bridge account'),script.index('rm -'))
         self.assertIn('rm -rf "/etc/systemd/system/$name.service.d"',script)
         subprocess.run(['bash','-n'],input=script,text=True,check=True)
+
+class AtomicSystemInstallTests(unittest.TestCase):
+    def test_system_rules_publish_after_permissions_are_final(self):
+        from dataclasses import replace
+        from waybridge.install import root_plan
+        from test_ux import KEY
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);c=replace(cfg(root),inbox=Path('/srv/bridge/inbox'))
+            key=root/'peer.pub';key.write_text(KEY);plan=root/'plan.sh'
+            with patch('waybridge.install.subprocess.run'),contextlib.redirect_stdout(io.StringIO()):root_plan(c,root/'config.toml',key,plan)
+            script=plan.read_text()
+            self.assertNotIn("cat > '/etc/polkit",script)
+            marker=script.index('/etc/polkit-1/rules.d/49-bridge-units.rules.waybridge.XXXXXX')
+            tail=script[marker:]
+            self.assertLess(tail.index('chmod 644'),tail.index('mv -f --'))
+            self.assertLess(tail.index('chown root:root'),tail.index('mv -f --'))
+            subprocess.run(['bash','-n',str(plan)],check=True)

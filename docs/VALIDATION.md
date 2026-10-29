@@ -149,3 +149,12 @@ shell syntax and reproducible source archive checks pass.
 These are regression results, not a guarantee against every failure or an audit
 certification. Clean installation and live pair verification are deployment steps
 performed separately after the release commit is pushed.
+
+
+# Clean-install correction · 3.6.2
+
+The first real clean reinstall of 3.6.1 exposed a polkit rule load failure that
+was absent when overwriting existing readable files. Root file publication now
+sets permissions and ownership on a temporary file before atomic rename, including
+when the invoking shell uses umask 077. The regression suite contains 81 tests.
+Live clean deployment is checked separately after the corrected release is pushed.

@@ -1,4 +1,4 @@
-# Waybridge 3.6.1
+# Waybridge 3.6.2
 
 Передача данных между Linux-компьютерами в Tailscale:
 
@@ -17,7 +17,7 @@
 На **обоих** устройствах из обычного терминала своей графической сессии:
 
 ```bash
-git clone --branch v3.6.1 --depth 1 https://github.com/Archibald-42/waybridge.git
+git clone --branch v3.6.2 --depth 1 https://github.com/Archibald-42/waybridge.git
 cd waybridge
 bash setup.sh
 ```
@@ -143,7 +143,7 @@ bridge-filter.service      — системный фильтр входящег�
 
 ```bash
 git fetch --tags origin
-git switch --detach v3.6.1
+git switch --detach v3.6.2
 bash setup.sh --update
 waybridge check
 ```
@@ -193,7 +193,7 @@ systemctl status bridge-shot.service
 PYTHONPATH=src python -m unittest discover -s tests -v
 python -W error -m compileall -q src scripts
 bash -n setup.sh
-python scripts/release.py --output ../waybridge-3.6.1.tar.gz
+python scripts/release.py --output ../waybridge-3.6.2.tar.gz
 sha256sum -c SHA256SUMS
 ```
 
@@ -255,3 +255,13 @@ Nordic Reader оформляет сайты в палитре Nord. Явный �
 - Удаление очищает drop-in-каталоги собственных служб, сначала проверяет служебный аккаунт и создаёт приватный каталог сохранённых данных. Дополнение Firefox удаляется отдельно через менеджер дополнений.
 
 Сохранённые файлы и страницы — пользовательские данные: чистая переустановка сохраняет их в архиве, но не импортирует старый inbox автоматически.
+
+## Исправление чистой установки 3.6.2
+
+Системные файлы записываются через временный файл в том же каталоге. Права и
+владелец выставляются до атомарного переименования. Это устраняет гонку при
+чистой установке с umask 077: polkit больше не получает уведомление о новом
+правиле, пока файл ещё недоступен для чтения. После ошибки запуска из-за правила
+примените полный `bash setup.sh --skip-packages` с актуальным профилем пары.
+Обычное `--update` обновляет только пользовательские компоненты и не исправляет
+уже отклонённое системное правило.

@@ -157,6 +157,7 @@ def root_plan(cfg,config,keyfile,output):
 set -Eeuo pipefail
 [[ $EUID == 0 ]] || { echo 'Run with sudo'; exit 1; }
 '''
+    text+="trap 'if [[ -n ${waybridge_tmp:-} ]]; then rm -f -- \"$waybridge_tmp\"; fi' EXIT\n"
     text+='target_user='+q(cfg.user)+'\ntarget_uid='+str(uid)+'\n'
     text+='[[ $(id -u "$target_user") == "$target_uid" ]] || exit 1\n'
     text+='[[ $(tailscale ip -4) == '+q(cfg.own_ip)+' ]] || { echo "Tailscale IP changed"; exit 1; }\n'
@@ -170,7 +171,13 @@ set -Eeuo pipefail
     text+='install -d -o root -g root -m 755 /etc/bridge /etc/bridge/keys /usr/local/libexec/bridge\nssh-keygen -A\n'
     def put(path,data,mode=644):
         nonlocal text
-        text+='cat > '+q(path)+" <<'WAYBRIDGE_FILE'\n"+data+'\nWAYBRIDGE_FILE\nchmod '+str(mode)+' '+q(path)+'\nchown root:root '+q(path)+'\n'
+        # Publish only after permissions/ownership are final. With umask 077,
+        # polkit can otherwise observe a new .rules file while it is still 0600
+        # and keep the failed load until a later content/rename notification.
+        text+='waybridge_tmp=$(mktemp -- '+q(path+'.waybridge.XXXXXX')+')\n'
+        text+="cat > \"$waybridge_tmp\" <<'WAYBRIDGE_FILE'\n"+data+'\nWAYBRIDGE_FILE\n'
+        text+='chmod '+str(mode)+' \"$waybridge_tmp\"\nchown root:root \"$waybridge_tmp\"\n'
+        text+='mv -f -- \"$waybridge_tmp\" '+q(path)+'\nunset waybridge_tmp\n'
     if cfg.role=='client':
         text+='''getent group bridge-files >/dev/null || groupadd bridge-files
 if ! id bridge >/dev/null 2>&1; then useradd -M -g bridge-files -d /inbox -s /usr/bin/nologin bridge; fi
