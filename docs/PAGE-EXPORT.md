@@ -17,11 +17,11 @@ URL сохраняются без query/fragment; cookies, localStorage и HTTP-
 
 ## Установка на существующую пару
 
-На обоих устройствах обновите checkout до `v3.6.2`:
+На обоих устройствах обновите checkout до `v3.6.3`:
 
 ```bash
 git fetch --tags origin
-git switch --detach v3.6.2
+git switch --detach v3.6.3
 bash setup.sh --update
 waybridge start
 waybridge check
@@ -184,3 +184,17 @@ Firefox integration test temporarily installs a test clone that pre-grants
 capture permission and exports only the bundled fixture. Its temporary profile,
 remote-debugging listener and helper code are removed after the test. It never
 attaches to the user's existing browser or changes that profile's preferences.
+
+
+## Где найти принятые формы на сервере
+
+По умолчанию экспорты сохраняются в `~/.cache/bridge/pages/`:
+
+- `<ID>.html` — автономная страница для чтения; открывается обычным браузером.
+- `<ID>.json` — структурированные данные и PNG-фрагменты снимка раздела.
+- `latest.json` — ID последнего принятого экспорта.
+
+Хранятся последние **10** экспортов. При изменении `state` в серверном config.toml
+папка находится в `STATE/pages/`. Изображения раздела встроены в HTML/JSON;
+обычные скриншоты монитора находятся отдельно, в `~/.cache/bridge/shots/`
+(последние **50** PNG). Важные экспорты скопируйте из cache в постоянную папку.

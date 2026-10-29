@@ -1,4 +1,4 @@
-"""Backed-up, idempotent integration with Hyprland Lua and Waybar JSONC."""
+"""Backed-up, idempotent integration with Hyprland Lua/conf and Waybar JSONC."""
 import json
 from pathlib import Path
 import shutil
@@ -9,7 +9,11 @@ def backup(path):
     path=Path(path)
     if not path.exists():return
     root=Path.home()/'.local/state/waybridge/backups'/str(time.time_ns())
-    dest=root/path.relative_to(Path.home());dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(path,dest)
+    try:relative=path.relative_to(Path.home())
+    except ValueError:
+        import hashlib
+        relative=Path('external')/hashlib.sha256(str(path).encode()).hexdigest()[:16]/path.name
+    dest=root/relative;dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(path,dest)
 
 def write(path,text):backup(path);atomic(path,text.encode())
 
@@ -58,18 +62,100 @@ def jsonc(text):
         else:out.append(c)
     return json.loads(''.join(out))
 
-def wire(cfg,config):
+HYPR_MODULES=('hypr-client','hypr-server','hypr-helper','helper-start')
+
+def hypr_record(config):
+    return Path(config).parent/'hypr-integration.json'
+
+def recorded_hypr(config):
+    try:
+        path=hypr_record(config)
+        if path.stat().st_size>4096:return None
+        value=json.loads(path.read_text())
+        raw=value.get('path') if isinstance(value,dict) else None
+        if isinstance(raw,str):
+            result=Path(raw).expanduser()
+            if result.is_absolute() and result.suffix in {'.lua','.conf'}:return result
+    except (OSError,ValueError):pass
+    return None
+
+def hypr_candidates(config):
+    home=Path.home()
+    paths=[home/'.config/hypr/hyprland.lua',home/'.config/hypr/hyprland.conf']
+    recorded=recorded_hypr(config)
+    if recorded and recorded not in paths:paths.append(recorded)
+    return paths
+
+def hypr_reference(line,kind):
+    """Match only our exact module includes, never arbitrary user source lines."""
+    stripped=line.strip()
+    import re
+    if kind=='.lua':
+        names='(?:'+'|'.join(re.escape(name) for name in HYPR_MODULES)+')'
+        tail=r'/\.config/bridge/'+names+r'\.lua'
+        quoted=r'["\'][^"\'\n]*'+tail+r'["\']'
+        home=r'os\.getenv\(\s*["\']HOME["\']\s*\)\s*\.\.\s*["\']'+tail+r'["\']'
+        return bool(re.fullmatch(r'dofile\s*\(\s*(?:'+quoted+'|'+home+r')\s*\)\s*;?\s*(?:--.*)?',stripped))
+    match=re.fullmatch(r'source\s*=\s*(.+?)(?:\s+#.*)?',stripped)
+    if not match:return False
+    raw=match[1].strip().strip('"\'')
+    return any(raw in {prefix+'/.config/bridge/'+name+'.conf' for prefix in ('~','$HOME',str(Path.home()))} for name in HYPR_MODULES)
+
+def clean_hypr(text,kind):
+    comments={'-- Waybridge session module','# Waybridge session module'}
+    return ''.join(line for line in text.splitlines(keepends=True)
+                   if line.strip() not in comments and not hypr_reference(line,kind))
+
+def select_hypr_config(explicit=None,config=None):
+    from .config import default_path
+    config=Path(config or default_path())
+    if explicit is not None:
+        path=Path(explicit).expanduser().absolute()
+        if path.suffix not in {'.lua','.conf'} or not path.is_file():
+            raise ValueError('--hypr-config должен указывать на существующий .lua или .conf файл')
+        return path
+    recorded=recorded_hypr(config)
+    if recorded and recorded.is_file():return recorded
+    paths=[p for p in hypr_candidates(config) if p.is_file()]
+    if len(paths)==1:return paths[0]
+    if not paths:return None
+    raise ValueError('Найдены hyprland.lua и hyprland.conf. Укажите активный файл: --hypr-config ПУТЬ')
+
+def write_hypr(path,text):
+    # Keep a dotfiles symlink in place; update its target with a backup.
+    write(path.resolve(strict=True),text)
+
+def unwire_hypr(config):
+    for path in hypr_candidates(config):
+        if not path.is_file():continue
+        original=path.read_text();text=clean_hypr(original,path.suffix)
+        if text!=original:write_hypr(path,text)
+
+def wire_hypr(cfg,config,hypr_config=None):
+    path=select_hypr_config(hypr_config,config)
+    if path is None:
+        print('Hyprland: основной конфиг не найден. Подключите hypr-'+cfg.role+'.lua через dofile или hypr-'+cfg.role+'.conf через source из ~/.config/bridge/.')
+        return
+    # Remove our includes from the previous format/role before selecting one.
+    # Different paths can be aliases of one symlink target. Handle the selected
+    # target exactly once and last so an old alias cannot undo its new include.
+    paths=[p for p in hypr_candidates(config) if p.resolve()!=path.resolve()]+[path]
+    for candidate in paths:
+        if not candidate.is_file():continue
+        original=candidate.read_text();text=clean_hypr(original,candidate.suffix)
+        if candidate==path:
+            module='hypr-'+cfg.role+path.suffix
+            if text and not text.endswith('\n'):text+='\n'
+            if path.suffix=='.lua':text+='-- Waybridge session module\ndofile(os.getenv("HOME") .. "/.config/bridge/'+module+'")\n'
+            else:text+='# Waybridge session module\nsource = ~/.config/bridge/'+module+'\n'
+        if text!=original:write_hypr(candidate,text)
+    atomic(hypr_record(config),json.dumps({'path':str(path),'format':path.suffix[1:]}).encode())
+    print('Hyprland: подключён '+module+' в '+str(path))
+
+def wire(cfg,config,hypr_config=None):
     from .install import command
-    home=Path.home();module='hypr-client.lua' if cfg.role=='client' else 'hypr-server.lua'
-    lua=home/'.config/hypr/hyprland.lua'
-    if lua.exists():
-        original=lua.read_text()
-        text=''.join(line for line in original.splitlines(keepends=True)
-                     if not ('dofile' in line and any(name in line for name in ('/.config/bridge/helper-start.lua','/.config/bridge/hypr-helper.lua'))))
-        if module not in text:text+='\n-- Waybridge session module\ndofile(os.getenv("HOME") .. "/.config/bridge/'+module+'")\n'
-        if text!=original:write(lua,text)
-        print('Hyprland: модуль подключён.')
-    else:print('Hyprland Lua config не найден; подключите ~/.config/bridge/'+module+' вручную.')
+    home=Path.home()
+    wire_hypr(cfg,config,hypr_config)
     waybar=home/'.config/waybar/config.jsonc'
     if not waybar.exists():waybar=home/'.config/waybar/config'
     if waybar.exists():

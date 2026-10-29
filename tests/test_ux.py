@@ -203,6 +203,7 @@ class BootstrapTests(unittest.TestCase):
             self.assertEqual(result.stdout.strip(),__version__)
             help_result=subprocess.run([str(prefix/'bin/waybridge'),'setup','--help'],capture_output=True,text=True,check=True)
             self.assertIn('--peer-profile',help_result.stdout)
+            self.assertIn('--hypr-config',help_result.stdout)
             self.assertNotIn('--keyboard',help_result.stdout)
             cli=subprocess.run([str(prefix/'bin/waybridge'),'--help'],capture_output=True,text=True,check=True).stdout
             for removed in ('send-answer','release','notes','clock,','input,'):self.assertNotIn(removed,cli)

@@ -41,6 +41,14 @@ def bindings(config):
             'hl.on("hyprland.start", function() hl.exec_cmd('+json.dumps(command(config,'session-start'))+') end)']
     return '\n'.join(lines)+'\n'
 
+def bindings_conf(config):
+    lines=['# Waybridge: Win+Z stop, Win+X start, Win+A screenshot.']
+    for code,action in [(52,'kill'),(53,'start'),(38,'shot')]:
+        lines.append('bind = SUPER, code:'+str(code)+', exec, '+command(config,'trigger '+action+' down'))
+    lines+=['permission = /usr/bin/grim, screencopy, allow',
+            'exec-once = '+command(config,'session-start')]
+    return '\n'.join(lines)+'\n'
+
 def legacy_root_cleanup(uid):
     """Remove only the old Waybridge input capability, retaining transport."""
     return '''systemctl stop ydotool-bridge.service 2>/dev/null || true
@@ -136,13 +144,17 @@ def user_install(cfg,config):
         write(home/'.config/bridge/hypr-server.lua','-- Server startup disabled: this device is now a client.\n')
         bridge=home/'.config/bridge';bridge.mkdir(parents=True,exist_ok=True)
         write(bridge/'hypr-client.lua',bindings(config))
+        write(bridge/'hypr-client.conf',bindings_conf(config))
+        write(bridge/'hypr-server.conf','# Server startup disabled: this device is now a client.\n')
     else:
         write(units/'bridge-shot-view.service',unit(config,'gallery',ready=True))
         write(home/'.config/bridge/hypr-client.lua','-- Client controls disabled: this device is now a server.\n')
         write(home/'.config/bridge/hypr-server.lua','hl.on(\"hyprland.start\", function() hl.exec_cmd('+json.dumps(command(config,'server-start'))+') end)\n')
+        write(home/'.config/bridge/hypr-client.conf','# Client controls disabled: this device is now a server.\n')
+        write(home/'.config/bridge/hypr-server.conf','exec-once = '+command(config,'server-start')+'\n')
     subprocess.run(['systemctl','--user','daemon-reload'],check=True,timeout=5)
     print('Installed user files. Backup:',backup)
-    print('Client module:',home/'.config/bridge/hypr-client.lua')
+    print('Hyprland modules:',home/'.config/bridge'/('hypr-'+cfg.role+'.lua'),'and',home/'.config/bridge'/('hypr-'+cfg.role+'.conf'))
     print('Installed screenshot and file transport. No service was started.')
 
 def root_plan(cfg,config,keyfile,output):

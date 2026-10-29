@@ -52,6 +52,7 @@ def main():
     sub.add_parser('doctor');sub.add_parser('install-user');sub.add_parser('check')
     uninstall=sub.add_parser('uninstall');uninstall.add_argument('--yes',action='store_true');uninstall.add_argument('--authorizer',choices=['sudo','pkexec'],default='sudo')
     setup=sub.add_parser('setup');setup.add_argument('--role',type=role,choices=['client','server']);setup.add_argument('--peer-profile');setup.add_argument('--yes',action='store_true');setup.add_argument('--update',action='store_true')
+    setup.add_argument('--hypr-config',help='активный hyprland.lua или hyprland.conf; нужен, если существуют оба')
     for flag in ('skip-packages','skip-root','no-start','no-integrate'):setup.add_argument('--'+flag,action='store_true')
     pair=sub.add_parser('pair');ps=pair.add_subparsers(dest='pair_action',required=True)
     exp=ps.add_parser('export');exp.add_argument('--role',type=role,choices=['client','server']);exp.add_argument('--output')
@@ -84,7 +85,7 @@ def main():
         c=args.command
         if c=='uninstall':
             from .uninstall import run
-            run(cfg,args.yes,args.authorizer);return 0
+            run(cfg,args.yes,args.authorizer,config_path=Path(args.config or default_path()));return 0
         if cfg.role=='server' and c in {'shot','files','battery','session-start','trigger','page-native'}:
             raise ValueError('this command requires role client')
         if cfg.role=='client' and c in {'receive','gallery','send-code','send-files','remote-files'}:

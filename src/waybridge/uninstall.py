@@ -46,7 +46,7 @@ rm -rf /srv/bridge
 systemctl daemon-reload
 '''
 
-def run(cfg,yes=False,authorizer='sudo'):
+def run(cfg,yes=False,authorizer='sudo',config_path=None):
     if os.geteuid()==0:raise RuntimeError('run uninstall as your ordinary user')
     home=Path.home();uid=os.getuid();user=pwd.getpwuid(uid).pw_name
     if not yes:
@@ -68,10 +68,9 @@ def run(cfg,yes=False,authorizer='sudo'):
         path=Path(td)/'system.sh';path.write_text(script);path.chmod(0o700)
         subprocess.run(['bash','-n',str(path)],check=True)
         subprocess.run([authorizer,'/usr/bin/bash',str(path)],check=True)
-    lua=home/'.config/hypr/hyprland.lua'
-    if lua.exists():
-        lines=lua.read_text().splitlines(keepends=True)
-        write(lua,''.join(line for line in lines if not (any(name in line for name in ('hypr-client.lua','hypr-server.lua','hypr-helper.lua','/.config/bridge/helper-start.lua')) and 'dofile' in line)))
+    from .integration import unwire_hypr
+    from .config import default_path
+    unwire_hypr(config_path or default_path())
     for bar in (home/'.config/waybar/config.jsonc',home/'.config/waybar/config'):
         if not bar.exists():continue
         data=jsonc(bar.read_text());bars=data if isinstance(data,list) else [data]

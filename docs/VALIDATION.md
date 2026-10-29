@@ -158,3 +158,13 @@ was absent when overwriting existing readable files. Root file publication now
 sets permissions and ownership on a temporary file before atomic rename, including
 when the invoking shell uses umask 077. The regression suite contains 81 tests.
 Live clean deployment is checked separately after the corrected release is pushed.
+
+
+# Hyprland installer compatibility · 3.6.3
+
+92 Python tests cover existing transport behavior plus Lua/conf selection,
+idempotent server source wiring, role and format changes, custom symlinks,
+remembered config paths, uninstall cleanup and stopped-state preservation during
+conf-based updates. An ambiguous fresh selection is rejected before the wizard
+changes services. Config fixtures are tested without altering the running desktop;
+this does not constitute a live session test on the user's new server.

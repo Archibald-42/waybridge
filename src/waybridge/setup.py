@@ -11,7 +11,7 @@ import tomllib
 from .config import default_path,load
 from .runtime import atomic
 from .pairing import export,read,fingerprint,configuration
-from .integration import backup,wire,shell_path,reload_panel
+from .integration import backup,wire,shell_path,reload_panel,select_hypr_config
 
 def run(args,timeout=None,check=True):return subprocess.run(args,check=check,timeout=timeout)
 def choose(title,items,default=0):
@@ -61,7 +61,7 @@ def receive_profile(role,folder,own_ip=None):
                 return path,value
             except (OSError,ValueError) as e:print('Профиль не принят:',e)
 
-def apply(own,peer,config,old,skip_root=False,integrate=True,start=True):
+def apply(own,peer,config,old,skip_root=False,integrate=True,start=True,hypr_config=None):
     from .install import root_plan,user_install,link
     from .control import execute
     previous=tomllib.loads(config.read_text()) if config.exists() else {}
@@ -94,7 +94,7 @@ def apply(own,peer,config,old,skip_root=False,integrate=True,start=True):
     run(['bash','-n',str(plan)])
     if not skip_root:run(['sudo','bash',str(plan)])
     link(cfg,host);user_install(cfg,config);shell_path()
-    if integrate:wire(cfg,config)
+    if integrate:wire(cfg,config,hypr_config)
     run(['systemctl','--user','import-environment','WAYLAND_DISPLAY','HYPRLAND_INSTANCE_SIGNATURE','XDG_CURRENT_DESKTOP'],check=False)
     if shutil.which('hyprctl'):run(['hyprctl','reload'],check=False)
     reload_panel()
@@ -104,14 +104,14 @@ def apply(own,peer,config,old,skip_root=False,integrate=True,start=True):
     print('Проверка соединения: waybridge check')
     return cfg
 
-def update(cfg,config,integrate=True,start=True):
+def update(cfg,config,integrate=True,start=True,hypr_config=None):
     """Refresh user components without changing keys, roles or system plans."""
     from .install import user_install
     from .control import execute
     was_running=not cfg.stopped.exists()
     execute(cfg,'stop')
     user_install(cfg,config);shell_path()
-    if integrate:wire(cfg,config)
+    if integrate:wire(cfg,config,hypr_config)
     run(['systemctl','--user','import-environment','WAYLAND_DISPLAY','HYPRLAND_INSTANCE_SIGNATURE','XDG_CURRENT_DESKTOP'],check=False)
     if shutil.which('hyprctl'):run(['hyprctl','reload'],check=False)
     if integrate:reload_panel()
@@ -125,10 +125,11 @@ def wizard(args):
     if not os.environ.get('XDG_RUNTIME_DIR'):raise RuntimeError('запустите setup в терминале своей графической сессии')
     config=Path(args.config or default_path()).expanduser().resolve();old=None
     if config.exists():old=load(config)
+    hypr_config=select_hypr_config(args.hypr_config,config) if not args.no_integrate else None
     if args.update:
         if not old:raise RuntimeError('Для обновления нужна существующая установка. Сначала выполните setup без --update.')
         if args.role or args.peer_profile or args.skip_root:raise ValueError('--update не меняет роли, профили или системные ограничения. Для смены ПК выполните обычный setup.')
-        return update(old,config,not args.no_integrate,not args.no_start)
+        return update(old,config,not args.no_integrate,not args.no_start,hypr_config)
     if old:print(f'Сейчас: {old.role} · peer {old.peer_ip}. Можно заменить peer или выбрать другую роль.')
     role=args.role or ('client','server')[choose('Роль этого компьютера:',['Клиент — получает файлы, отправляет снимки','Сервер (ПК) — показывает снимки, отправляет файлы'],0 if not old or old.role=='client' else 1)]
     if not args.skip_packages:
@@ -161,5 +162,5 @@ def wizard(args):
     print(f'\nВторой ПК: {peer["hostname"]} · {peer["ip"]} · {peer["user"]} · {peer["role"]}')
     print('Код сверки профиля:',fingerprint(peer))
     if not args.yes:input('Сверьте код с экраном второго ПК; Enter продолжает настройку, Ctrl+C отменяет: ')
-    apply(own,peer,config,old,args.skip_root,not args.no_integrate,not args.no_start)
+    apply(own,peer,config,old,args.skip_root,not args.no_integrate,not args.no_start,hypr_config)
     return 0
