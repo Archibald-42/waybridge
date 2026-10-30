@@ -78,7 +78,7 @@ class UninstallTests(unittest.TestCase):
             for name in ('bridge-files.service.d','unrelated.service.d'):
                 (units/name).mkdir();(units/name/'custom.conf').write_text('keep only unrelated')
             (home/'.ssh').mkdir();(home/'.ssh/bridge-admin-known_hosts').write_text('preserve admin pin')
-            with patch('pathlib.Path.home',return_value=home),patch('waybridge.uninstall.subprocess.run'),patch('waybridge.uninstall.reload_panel'),patch('waybridge.control.execute'),contextlib.redirect_stdout(io.StringIO()):run(c,yes=True)
+            with patch('pathlib.Path.home',return_value=home),patch.dict('os.environ',{'XDG_RUNTIME_DIR':td}),patch('waybridge.uninstall.subprocess.run'),patch('waybridge.uninstall.reload_panel'),patch('waybridge.control.execute'),contextlib.redirect_stdout(io.StringIO()):run(c,yes=True)
             self.assertFalse((units/'bridge-files.service.d').exists());self.assertTrue((units/'unrelated.service.d/custom.conf').exists())
             self.assertEqual((c.projects/'main.py').read_text(),'keep');self.assertTrue((home/'.ssh/bridge-admin-known_hosts').exists())
     def test_account_validated_before_destructive_cleanup(self):

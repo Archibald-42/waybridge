@@ -80,6 +80,12 @@ def serve(cfg):
     try:
         while True:
             if not all(w.is_alive() for w in workers):raise RuntimeError('worker thread terminated')
+            if not endpoint.exists():
+                # A removed pathname leaves an otherwise healthy AF_UNIX listener
+                # unreachable. Rebind without stopping capture/transmit workers or
+                # dropping their RAM queue.
+                sock.close();sock=listener(endpoint)
+                notify('STATUS=Screenshot IPC endpoint restored')
             notify('WATCHDOG=1')
             try:conn,_=sock.accept()
             except socket.timeout:continue

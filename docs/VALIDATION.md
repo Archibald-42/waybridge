@@ -189,3 +189,14 @@ upgrade regression verifies that each background manifest entry exists, retired
 package filenames are removed and unrelated files are preserved. The suite now
 contains 93 Python tests. Browser lifecycle/native delivery tests are rerun on the
 renamed modules before publishing.
+
+
+# Screenshot IPC recovery · 3.6.6
+
+A local uninstall test previously inherited the real XDG_RUNTIME_DIR and removed
+the live screenshot socket. The test now isolates its runtime directory. A full
+94-test run preserved the actual running socket inode; a real subsequent screenshot
+received its SSH ACK. The new isolated integration test removes an IPC pathname
+while a synthetic frame waits for ACK: the listener rebinds and the queued frame
+remains intact and is acknowledged. Diagnostics now verifies the queue RPC rather
+than only reporting that its systemd unit is active.
