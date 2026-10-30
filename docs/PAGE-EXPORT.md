@@ -17,11 +17,11 @@ URL сохраняются без query/fragment; cookies, localStorage и HTTP-
 
 ## Установка на существующую пару
 
-На обоих устройствах обновите checkout до `v3.6.6`:
+На обоих устройствах обновите checkout до `v3.6.7`:
 
 ```bash
 git fetch --tags origin
-git switch --detach v3.6.6
+git switch --detach v3.6.7
 bash setup.sh --update
 waybridge start
 waybridge check
