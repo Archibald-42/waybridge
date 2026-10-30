@@ -1,7 +1,7 @@
 const toggle = document.getElementById("nordic");
 const notice = document.getElementById("notice");
 const message = document.getElementById("auto-status");
-const confirm = document.getElementById("auto-confirm");
+const access = document.getElementById("export-access");
 let localError = "";
 let changing = false;
 
@@ -9,14 +9,16 @@ async function refresh() {
   try {
     const state = await browser.runtime.sendMessage({action: "status"});
     if (!changing) toggle.checked = Boolean(state.nordic);
-    const problem = state.autoConfirm || (state.nordic && state.autoProblem);
+    const allowed = await browser.permissions.contains({origins: ["<all_urls>"]});
+    access.hidden = allowed;
+    const problem = state.autoProblem;
     notice.hidden = !localError && !problem;
     message.textContent = localError || state.autoMessage || "";
-    confirm.hidden = !state.autoConfirm;
+
   } catch (error) {
     notice.hidden = false;
     message.textContent = error.message;
-    confirm.hidden = true;
+
   }
 }
 toggle.addEventListener("change", async () => {
@@ -29,14 +31,15 @@ toggle.addEventListener("change", async () => {
   } catch (error) { localError = error.message; }
   finally { changing = false; toggle.disabled = false; await refresh(); }
 });
-confirm.addEventListener("click", async () => {
-  confirm.disabled = true;
+access.addEventListener("click", async () => {
+  access.disabled = true;
   try {
-    const result = await browser.runtime.sendMessage({action: "nordic-confirm"});
-    if (!result.ok) throw new Error(result.error || "Не удалось подтвердить отправку.");
+    if (!await browser.permissions.request({origins: ["<all_urls>"]})) throw new Error("Разрешение Firefox не предоставлено.");
+    const result = await browser.runtime.sendMessage({action: "nordic-access"});
+    if (!result.ok) throw new Error(result.error || "Не удалось подключить страницы.");
     localError = "";
   } catch (error) { localError = error.message; }
-  finally { confirm.disabled = false; await refresh(); }
+  finally { access.disabled = false; await refresh(); }
 });
 refresh();
 setInterval(refresh, 500);

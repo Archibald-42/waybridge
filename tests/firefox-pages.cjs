@@ -64,7 +64,7 @@ const root=path.resolve(__dirname,'..');
   const integration=automatic ? `
   (async()=>{
    try {
-    await Nordic.handle({action:'nordic-set',enabled:true},{});
+    // Automatic export must work without enabling the theme.
     const [target]=await browser.tabs.query({active:true,currentWindow:true});
     await browser.tabs.update(target.id,{url:${JSON.stringify(automaticURL)}});
    } catch(error) { await fetch(${JSON.stringify(reportURL)},{method:'POST',body:JSON.stringify({error:error.message})}); }

@@ -22,7 +22,11 @@ outside the removed runtime. It removes dedicated transport keys; fresh pairing
 is required after a clean reinstall. General-purpose system packages are retained.
 
 
-Page export is explicitly user-triggered. Firefox grants optional capture access;
+After the user grants optional Firefox capture access, active Google Forms sections
+are exported automatically, independently of the theme toggle. Disabling the add-on
+or revoking its page access stops collection; stopping native transport alone
+leaves the bounded browser RAM queue available for retry.
+Firefox grants optional capture access;
 a native messaging manifest authorizes only the fixed add-on ID. No HTTP listener,
 cookie API or extra inbound port is used in production. Page packets have bounded
 size, validated PNG tiles and complete geometry. The reader uses escaped text,

@@ -168,3 +168,14 @@ remembered config paths, uninstall cleanup and stopped-state preservation during
 conf-based updates. An ambiguous fresh selection is rejected before the wizard
 changes services. Config fixtures are tested without altering the running desktop;
 this does not constitute a live session test on the user's new server.
+
+
+# Independent theme and automatic queue · 3.6.4
+
+Browser regressions cover automatic capture while the theme is initially off,
+warning-bearing snapshots delivered without a head-of-line review gate, backlog
+saturation preserving the native failure reason, same-ID retry and queue retention
+through repeated theme toggles. Real Chromium content lifecycle tests verify that
+disabling the theme continues section export and explicit controller stop ends it.
+An isolated real Firefox auto-export test with the theme off received matching
+native SSH ACKs from the paired PC. The 92 Python tests remain passing.

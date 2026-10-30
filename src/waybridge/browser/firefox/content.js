@@ -1,13 +1,13 @@
 /* One controller per document, including repeated tab activations. */
 (() => {
-  if (globalThis.WaybridgeNordic?.version === 4) return;
+  if (globalThis.WaybridgeNordic?.version === 5) return;
   if (globalThis.WaybridgeNordic) void globalThis.WaybridgeNordic.set(false);
-  let enabled = false, timer = null, inFlight = false, lastKey = null, scheduledAt = 0;
+  let enabled = false, exporting = false, timer = null, inFlight = false, lastKey = null, scheduledAt = 0;
   let visit = crypto.randomUUID(), observedKey = null;
   const form = () => Boolean(WaybridgeFormURL(location.href));
   function schedule(delay = 350) {
     clearTimeout(timer);
-    if (enabled && form() && !document.hidden) {
+    if (exporting && form() && !document.hidden) {
       const now = Date.now();
       if (delay === 350) {
         if (!scheduledAt) scheduledAt = now;
@@ -18,7 +18,7 @@
   }
   async function check() {
     scheduledAt = 0;
-    if (!enabled || document.hidden) return;
+    if (!exporting || document.hidden) return;
     if (inFlight) { schedule(1000); return; }
     inFlight = true;
     try {
@@ -29,8 +29,8 @@
       if (key === lastKey) return;
       const currentVisit = visit;
       const result = await browser.runtime.sendMessage({action: "section", key, visit});
-      if (enabled && visit === currentVisit && result?.delivered) lastKey = key;
-      else if (enabled) schedule(result?.retryAfter || (result?.accepted ? 1000 : 3000));
+      if (exporting && visit === currentVisit && result?.delivered) lastKey = key;
+      else if (exporting) schedule(result?.retryAfter || (result?.accepted ? 1000 : 3000));
     } catch (_) { schedule(5000); }
     finally { inFlight = false; }
   }
@@ -45,20 +45,27 @@
           n.nodeType !== 1 || !n.matches('style,script,link.darkreader')));
     })) schedule();
   });
-  async function set(value) {
-    enabled = Boolean(value); lastKey = null; scheduledAt = 0;
-    clearTimeout(timer); observer.disconnect();
-    if (enabled) {
-      DarkReader.setFetchMethod(url => fetch(url, {credentials: "omit"}));
-      DarkReader.enable({mode: 1, brightness: 100, contrast: 100, sepia: 0,
-        darkSchemeBackgroundColor: "#2e3440", darkSchemeTextColor: "#d8dee9",
-        selectionColor: "#5e81ac"});
-      if (form()) observer.observe(document.documentElement, {subtree: true, childList: true,
-        characterData: true, attributes: true, attributeFilter: ["hidden", "aria-hidden", "src", "class", "style"]});
-      schedule();
-    } else DarkReader.disable();
+  async function set(value, autoExport = true) {
+    const theme = Boolean(value), active = Boolean(autoExport) && form();
+    if (theme !== enabled) {
+      enabled = theme;
+      if (enabled) {
+        DarkReader.setFetchMethod(url => fetch(url, {credentials: "omit"}));
+        DarkReader.enable({mode: 1, brightness: 100, contrast: 100, sepia: 0,
+          darkSchemeBackgroundColor: "#2e3440", darkSchemeTextColor: "#d8dee9", selectionColor: "#5e81ac"});
+      } else DarkReader.disable();
+    }
+    if (active !== exporting) {
+      exporting = active; lastKey = null; scheduledAt = 0;
+      clearTimeout(timer); observer.disconnect();
+      if (exporting) {
+        observer.observe(document.documentElement, {subtree: true, childList: true,
+          characterData: true, attributes: true, attributeFilter: ["hidden", "aria-hidden", "src", "class", "style"]});
+        schedule();
+      }
+    }
   }
-  globalThis.WaybridgeNordic = {version: 4, set};
+  globalThis.WaybridgeNordic = {version: 5, set};
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) { visit = crypto.randomUUID(); lastKey = null; }
     schedule();
