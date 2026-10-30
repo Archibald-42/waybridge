@@ -26,7 +26,7 @@ async function controller() {
     };return port;
    }}
   }};
- vm.createContext(sandbox); vm.runInContext(source('forms.js'), sandbox); vm.runInContext(source('section-key.js'), sandbox);
+ vm.createContext(sandbox); vm.runInContext(source('page-url.js'), sandbox); vm.runInContext(source('page-identity.js'), sandbox);
  vm.runInContext(source('nordic.js'), sandbox);
  const control = vm.runInContext('Nordic', sandbox);
  // Export must work from startup while the stored theme is off.
@@ -37,7 +37,7 @@ async function controller() {
   async tick() {const callbacks=[...timers.values()];timers.clear();for(const fn of callbacks)fn();await this.flush();}};
 }
 (async () => {
- const sandbox = {URL};vm.createContext(sandbox);vm.runInContext(source('forms.js'),sandbox);
+ const sandbox = {URL};vm.createContext(sandbox);vm.runInContext(source('page-url.js'),sandbox);
  const canonical = value => sandbox.WaybridgeFormURL(value);
  const legacyURL = 'https://docs.google.com/forms/viewform?embedded=true&id=fixture_1&hl=ru&token=secret#fragment';
  assert.equal(canonical(legacyURL),'https://docs.google.com/forms/d/fixture_1/viewform');
@@ -110,7 +110,7 @@ async function controller() {
   await page.goto(legacyURL);
   await page.evaluate(() => {window.reports=[];window.browser={runtime:{sendMessage:async m=>{window.reports.push(m);return {accepted:true,delivered:true};}}};});
   await page.evaluate(() => {window.previousDisabled=false;window.WaybridgeNordic={set: value => {if(value===false)window.previousDisabled=true;}};});
-  for(const name of ['forms.js','darkreader.js','extract.js','section-key.js','content.js'])await page.addScriptTag({content:source(name)});
+  for(const name of ['page-url.js','darkreader.js','page-snapshot.js','page-identity.js','content.js'])await page.addScriptTag({content:source(name)});
   assert(await page.evaluate(() => window.previousDisabled));
   await page.evaluate(() => WaybridgeNordic.set(true));
   await page.waitForFunction(() => window.reports.length===1);

@@ -33,7 +33,7 @@ const Nordic = (() => {
       if (!exists[0]) {
         if ((!enabled && !isForm(tab)) || token !== generation) return;
         await browser.tabs.executeScript(tabId, {code: "globalThis.WaybridgeNordic?.set(false); true"});
-        for (const file of ["forms.js", "darkreader.js", "extract.js", "section-key.js", "content.js"])
+        for (const file of ["page-url.js", "darkreader.js", "page-snapshot.js", "page-identity.js", "content.js"])
           await browser.tabs.executeScript(tabId, {file, runAt: "document_idle"});
       }
       // Read current mode after injection: disabling during injection must win.

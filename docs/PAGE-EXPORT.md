@@ -1,4 +1,4 @@
-# Экспорт текущего раздела страницы · 3.6.4
+# Экспорт текущего раздела страницы · 3.6.5
 
 ## Что получается
 
@@ -17,11 +17,11 @@ URL сохраняются без query/fragment; cookies, localStorage и HTTP-
 
 ## Установка на существующую пару
 
-На обоих устройствах обновите checkout до `v3.6.4`:
+На обоих устройствах обновите checkout до `v3.6.5`:
 
 ```bash
 git fetch --tags origin
-git switch --detach v3.6.4
+git switch --detach v3.6.5
 bash setup.sh --update
 waybridge start
 waybridge check

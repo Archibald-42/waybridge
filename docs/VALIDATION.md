@@ -179,3 +179,13 @@ through repeated theme toggles. Real Chromium content lifecycle tests verify tha
 disabling the theme continues section export and explicit controller stop ends it.
 An isolated real Firefox auto-export test with the theme off received matching
 native SSH ACKs from the paired PC. The 92 Python tests remain passing.
+
+
+# Descriptive module names · 3.6.5
+
+Only module filenames/import references change; export selection, queue limits,
+retry timing, native framing and receiver ACK semantics are unchanged. The asset
+upgrade regression verifies that each background manifest entry exists, retired
+package filenames are removed and unrelated files are preserved. The suite now
+contains 93 Python tests. Browser lifecycle/native delivery tests are rerun on the
+renamed modules before publishing.

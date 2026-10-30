@@ -52,7 +52,7 @@ const root=path.resolve(__dirname,'..');
   const automaticURL=`http://127.0.0.1:${server.address().port}/forms/viewform?embedded=true&id=fixture_legacy&notExported=secret`;
   if(automatic){
    // Only the isolated test clone admits the loopback fixture origin.
-   const forms=path.join(ext,'forms.js');
+   const forms=path.join(ext,'page-url.js');
    fs.writeFileSync(forms,fs.readFileSync(forms,'utf8').replace('url.origin !== "https://docs.google.com"',`url.origin !== ${JSON.stringify(new URL(automaticURL).origin)}`));
    const controller=path.join(ext,'nordic.js');
    let code=fs.readFileSync(controller,'utf8');

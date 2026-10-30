@@ -111,8 +111,11 @@ def install_page_export(cfg,config,write):
     manifest={'name':HOST_NAME,'description':'Waybridge page snapshot transport',
               'path':str(wrapper),'type':'stdio','allowed_extensions':[EXTENSION_ID]}
     for path in manifests:write(path,json.dumps(manifest,indent=2)+'\n',0o600)
-    for source in (Path(__file__).parent/'browser/firefox').iterdir():
+    sources=Path(__file__).parent/'browser/firefox'
+    for source in sorted(sources.iterdir(),key=lambda p:(p.name=='manifest.json',p.name)):
         if source.is_file():write(assets/source.name,source.read_text())
+    # Remove only known retired package modules after the new manifest/files exist.
+    for name in ('forms.js','extract.js','section-key.js'):(assets/name).unlink(missing_ok=True)
 
 def user_install(cfg,config):
     home=Path.home();backup=home/'.local/state/waybridge/backups'/time.strftime('%Y%m%d-%H%M%S')

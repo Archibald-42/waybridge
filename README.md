@@ -2,7 +2,7 @@
 
 **Скриншоты, файлы и разделы страниц между двумя Linux-компьютерами через Tailscale.**
 
-[Релиз 3.6.4](https://github.com/Archibald-42/waybridge/releases/tag/v3.6.4) · [Проверки CI](https://github.com/Archibald-42/waybridge/actions/workflows/tests.yml) · [Экспорт форм](docs/PAGE-EXPORT.md) · [Настройка Hyprland](docs/HYPRLAND.md) · [Безопасность](SECURITY.md)
+[Релиз 3.6.5](https://github.com/Archibald-42/waybridge/releases/tag/v3.6.5) · [Проверки CI](https://github.com/Archibald-42/waybridge/actions/workflows/tests.yml) · [Экспорт форм](docs/PAGE-EXPORT.md) · [Настройка Hyprland](docs/HYPRLAND.md) · [Безопасность](SECURITY.md)
 
 Ноутбук — **клиент**, второй компьютер — **сервер**. Интернет может быть мобильным: публичный IP, IPv6 и проброс портов не нужны. Устройства связываются по Tailscale IPv4, данные передаются через SSH с закреплённым ключом второго устройства.
 
@@ -54,7 +54,7 @@
 На **обоих** компьютерах в обычном терминале графической сессии:
 
 ```bash
-git clone --branch v3.6.4 --depth 1 https://github.com/Archibald-42/waybridge.git
+git clone --branch v3.6.5 --depth 1 https://github.com/Archibald-42/waybridge.git
 cd waybridge
 bash setup.sh
 ```
@@ -131,7 +131,7 @@ wb-files
 
 Активные разделы Google Forms автоматически экспортируются на парный сервер после предоставления Firefox доступа к страницам. Переключатель **«Тема Nord»** управляет только оформлением сайтов: его выключение не останавливает передачу и не очищает очередь. Предупреждения о неполном содержимом передаются вместе со снимком и не блокируют автоматическую очередь. Для остановки передачи используйте `waybridge stop`, для полного отключения сбора — отключите дополнение в Firefox или отзовите доступ к страницам. Приватные вкладки исключены. Следующие, ещё не открытые разделы автоматически не запрашиваются. Текст и визуальный снимок могут содержать введённые в форму данные.
 
-XPI неподписанный. Обычный Firefox поддерживает временную загрузку через `about:debugging`. Постоянная установка неподписанного XPI возможна в Developer Edition при отдельно настроенной проверке подписей. Установщик Waybridge не меняет настройки проверки подписей, не переносит и не удаляет профиль Firefox, пароли или тему. **В релизе 3.6.4 обновите Nordic Reader до 3.6.4**: изменение логики очереди находится в расширении.
+XPI неподписанный. Обычный Firefox поддерживает временную загрузку через `about:debugging`. Постоянная установка неподписанного XPI возможна в Developer Edition при отдельно настроенной проверке подписей. Установщик Waybridge не меняет настройки проверки подписей, не переносит и не удаляет профиль Firefox, пароли или тему. **В релизе 3.6.5 обновите Nordic Reader до 3.6.5**: изменение логики очереди находится в расширении.
 
 ## Обновление, смена ПК и удаление
 
@@ -139,7 +139,7 @@ XPI неподписанный. Обычный Firefox поддерживает 
 
 ```bash
 git fetch --tags origin
-git switch --detach v3.6.4
+git switch --detach v3.6.5
 bash setup.sh --update
 waybridge check
 ```
@@ -214,8 +214,15 @@ systemctl status bridge-shot.service bridge-filter.service
 PYTHONPATH=src python -m unittest discover -s tests -v
 python -W error -m compileall -q src scripts
 bash -n setup.sh
-python scripts/release.py --output ../waybridge-3.6.4.tar.gz
+python scripts/release.py --output ../waybridge-3.6.5.tar.gz
 sha256sum -c SHA256SUMS
 ```
 
 CI проверяет Python 3.11/3.14, воспроизводимость архива, реальный DOM в Chromium и расширение в изолированном Firefox. Локальные профили, ключи, снимки, формы и deployment-конфиги в исходный архив не включаются. Проверки не являются гарантией отсутствия всех возможных сбоев; процессы с тем же Linux UID находятся вне границы доверия приложения.
+
+### Внутренние модули расширения
+
+Модули названы по назначению: `page-url.js` определяет поддерживаемые адреса,
+`page-snapshot.js` читает снимок документа, `page-identity.js` вычисляет идентичность
+раздела. Передача, лимиты, повторы, подтверждения и остановка работают как прежде.
+Назначение приложения и разрешения явно описаны в этом README и манифесте.

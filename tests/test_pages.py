@@ -174,3 +174,17 @@ class NativeTests(unittest.TestCase):
                 proc.kill.assert_called_once()
 
 if __name__=='__main__':unittest.main()
+
+class AssetUpgradeTests(unittest.TestCase):
+    def test_asset_upgrade_resolves_manifest_and_prunes_only_retired_modules(self):
+        from waybridge.install import install_page_export
+        with tempfile.TemporaryDirectory() as td,patch('pathlib.Path.home',return_value=Path(td)):
+            home=Path(td);assets=home/'.local/share/waybridge/firefox-export';assets.mkdir(parents=True)
+            for name in ('forms.js','extract.js','section-key.js','personal-note.txt'):(assets/name).write_text('old')
+            def write(path,data,mode=0o644):
+                path.parent.mkdir(parents=True,exist_ok=True);path.write_text(data)
+            install_page_export(cfg(home),home/'config.toml',write)
+            manifest=json.loads((assets/'manifest.json').read_text())
+            for name in manifest['background']['scripts']:self.assertTrue((assets/name).is_file(),name)
+            for name in ('forms.js','extract.js','section-key.js'):self.assertFalse((assets/name).exists())
+            self.assertEqual((assets/'personal-note.txt').read_text(),'old')
